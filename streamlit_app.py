@@ -3,25 +3,6 @@ from openai import OpenAI
 import pandas as pd
 import plotly.graph_objects as go
 
-st.markdown("""
-    <style>
-    .stButton>button {
-        height: 2em;
-        width: 5em;
-        margin: 5px 0;
-    }
-    .sync-buttons {
-        display: flex;
-        justify-content: space-around;
-        margin-top: 20px;
-    }
-    #GithubIcon {
-        visibility: hidden;
-    }
-    </style>
-""", unsafe_allow_html=True)
-st.markdown(hide_github_icon, unsafe_allow_html=True)
-
 # Add sidebar with menu item
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio("Menu", ["Insight Conversation"])
