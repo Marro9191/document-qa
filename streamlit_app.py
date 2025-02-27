@@ -4,12 +4,12 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # Show title and description
-st.title("📄 Document question answering with visualizations")
+st.title("📄 Ask me analytical questions")
 st.write(
-    "Upload a document below and ask a question about it – GPT will answer! "
+    "Upload a document below and ask a question about it – Jenny will answer it! "
     "Supported formats: .txt, .md, .csv, .xlsx. For Excel/CSV files, "
-    "you can also visualize the data with customizable charts. "
-    "Please ensure your OpenAI API key is stored in `.streamlit/secrets.toml`."
+    "you can also visualize the data with customizable charts for your convienence. "
+    
 )
 
 # Get OpenAI API key from Streamlit secrets (no UI input required)
@@ -91,11 +91,11 @@ if uploaded_file and question:
                 y_col = st.selectbox("Y-axis", numeric_cols)
                 
                 # Color options
-                color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
-                if color_option == "Single Color":
-                    color = st.color_picker("Pick a color", "#00f900")
-                else:
-                    color = color_option
+                #color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
+                #if color_option == "Single Color":
+                    #color = st.color_picker("Pick a color", "#00f900")
+               # else:
+                    #color = color_option
 
                 # Chart customization
                 chart_title = st.text_input("Chart Title", "Data Visualization")
