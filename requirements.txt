@@ -3,4 +3,4 @@ openai
 pandas
 matplotlib
 seaborn
-plotly.graph_objects
+plotly
