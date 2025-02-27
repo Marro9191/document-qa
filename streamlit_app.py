@@ -3,6 +3,14 @@ from openai import OpenAI
 import pandas as pd
 import plotly.graph_objects as go
 
+# Add custom CSS to hide the GitHub icon
+hide_github_icon = """
+#GithubIcon {
+  visibility: hidden;
+}
+"""
+st.markdown(hide_github_icon, unsafe_allow_html=True)
+
 # Add sidebar with menu item
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio("Menu", ["Insight Conversation"])
