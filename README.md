@@ -1,6 +1,6 @@
 # 📄 Analysis of Excel, CSV files
-Simple streamlit template logic and UI were adjusted to do the following:
-1. Answer questions about the documents (Excel, CSV) and provide insight
+I took a simple streamlit template and adjusted logic and UI to do the following:
+1. Answer questions about the documents e.g CSV and provide insight
 2. Perform Calculations
 3. Generate Visualizations
 
