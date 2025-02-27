@@ -91,11 +91,11 @@ if uploaded_file and question:
                 y_col = st.selectbox("Y-axis", numeric_cols)
                 
                 # Color options
-                #color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
-                #if color_option == "Single Color":
-                    #color = st.color_picker("Pick a color", "#00f900")
-               # else:
-                    #color = color_option
+                color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
+                if color_option == "Single Color":
+                    color = st.color_picker("Pick a color", "#00f900")
+               else:
+                    color = color_option
 
                 # Chart customization
                 chart_title = st.text_input("Chart Title", "Data Visualization")
