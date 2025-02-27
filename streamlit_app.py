@@ -33,7 +33,7 @@ if menu == "Insight Conversation":
     # Ask the user for a question only after a file is uploaded
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="For example: What were total number of reviews last month compared to this month for tootbrush category? Give me total for each month only.",
+        placeholder="For example: What were total number of reviews last month compared to this month for tootbrush category? Give me total for each month only.(Please note it has to be UTF 8 encoded)",
         disabled=not uploaded_file,
     )
 
