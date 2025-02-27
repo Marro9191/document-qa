@@ -9,7 +9,7 @@ menu = st.sidebar.radio("Menu", ["Insight Conversation"])
 
 # Show title and description (main area)
 if menu == "Insight Conversation":
-    st.title("📄 Document question answering with visualizations")
+    st.title("📄 Comcore Prototype v1")
     st.write(
         "Upload a document below and ask analytical questions "
         "Supported formats: .txt, .md, .csv, .xlsx. For Excel/CSV files, "
