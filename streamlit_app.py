@@ -1,13 +1,14 @@
 import streamlit as st
 from openai import OpenAI
 import pandas as pd
+import plotly.graph_objects as go
 
 # Show title and description
-st.title("📄 Document question answering")
+st.title("📄 Document question answering with visualizations")
 st.write(
     "Upload a document below and ask a question about it – GPT will answer! "
-    "Supported formats: .txt, .md, .csv, .xlsx. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys)."
+    "Supported formats: .txt, .md, .csv, .xlsx. For Excel/CSV files, "
+    "you can also visualize the data with customizable charts."
 )
 
 # Ask user for their OpenAI API key
@@ -34,6 +35,7 @@ else:
     if uploaded_file and question:
         # Process the uploaded file based on its type
         file_extension = uploaded_file.name.split('.')[-1].lower()
+        df = None
         
         if file_extension in ['txt', 'md']:
             document = uploaded_file.read().decode()
@@ -65,5 +67,81 @@ else:
             stream=True,
         )
 
-        # Stream the response
+        # Display the response
+        st.subheader("GPT Response")
         st.write_stream(stream)
+
+        # If it's a data file (CSV/Excel), offer visualization options
+        if df is not None:
+            st.subheader("Data Visualizations")
+            
+            # Display the table
+            st.write("Data Table:")
+            st.dataframe(df)
+
+            # Visualization options
+            if not df.empty:
+                st.write("Generate a chart:")
+                chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"])
+                x_col = st.selectbox("X-axis", df.columns)
+                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+                
+                if len(numeric_cols) > 0:
+                    y_col = st.selectbox("Y-axis", numeric_cols)
+                    
+                    # Color options
+                    color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
+                    if color_option == "Single Color":
+                        color = st.color_picker("Pick a color", "#00f900")
+                    else:
+                        color = color_option
+
+                    # Chart customization
+                    chart_title = st.text_input("Chart Title", "Data Visualization")
+                    
+                    if st.button("Generate Chart"):
+                        fig = go.Figure()
+                        
+                        if chart_type == "Bar":
+                            fig.add_trace(go.Bar(x=df[x_col], y=df[y_col], marker_color=color if color_option == "Single Color" else None))
+                        
+                        elif chart_type == "Line":
+                            fig.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
+                        
+                        elif chart_type == "Pie":
+                            pie_data = df.groupby(x_col)[y_col].sum()
+                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                        
+                        elif chart_type == "Scatter":
+                            fig.add_trace(go.Scatter(
+                                x=df[x_col], 
+                                y=df[y_col], 
+                                mode='markers',
+                                marker=dict(
+                                    color=df[color] if color_option != "Single Color" else color,
+                                    size=10
+                                )
+                            ))
+                        
+                        elif chart_type == "Area":
+                            fig.add_trace(go.Scatter(
+                                x=df[x_col], 
+                                y=df[y_col], 
+                                fill='tozeroy',
+                                line=dict(color=color if color_option == "Single Color" else None)
+                            ))
+
+                        # Update layout
+                        fig.update_layout(
+                            title=chart_title,
+                            xaxis_title=x_col,
+                            yaxis_title=y_col,
+                            height=500,
+                            width=700
+                        )
+                        
+                        st.plotly_chart(fig)
+                else:
+                    st.warning("No numeric columns available for charting.")
+            else:
+                st.warning("The uploaded data is empty.")
