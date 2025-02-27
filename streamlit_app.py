@@ -8,7 +8,7 @@ st.title("📄 Document question answering with visualizations")
 st.write(
     "Upload a document below and ask a question about it – GPT will answer! "
     "Supported formats: .txt, .md, .csv, .xlsx. For Excel/CSV files, "
-    "a pie chart will automatically be generated for Toothbrush reviews."
+    "you can also visualize the data with customizable charts."
 )
 
 # Ask user for their OpenAI API key
@@ -71,7 +71,7 @@ else:
         st.subheader("GPT Response")
         st.write_stream(stream)
 
-        # If it's a data file (CSV/Excel), automatically generate a pie chart for Toothbrush reviews
+        # If it's a data file (CSV/Excel), offer visualization options
         if df is not None:
             st.subheader("Data Visualizations")
             
@@ -79,29 +79,69 @@ else:
             st.write("Data Table:")
             st.dataframe(df)
 
-            # Filter for Toothbrush category and count reviews by month (January and February 2025)
-            toothbrush_data = df[df['Category'] == 'Toothbrush']
-            if not toothbrush_data.empty:
-                # Group by date (assuming date format allows month extraction) and count reviews
-                toothbrush_data['Month'] = pd.to_datetime(toothbrush_data['Date']).dt.strftime('%B %Y')
-                monthly_reviews = toothbrush_data.groupby('Month')['Reviews'].sum()
+            # Visualization options
+            if not df.empty:
+                st.write("Generate a chart:")
+                chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"])
+                x_col = st.selectbox("X-axis", df.columns)
+                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 
-                # Filter for January and February 2025
-                january_reviews = monthly_reviews.get('January 2025', 0)
-                february_reviews = monthly_reviews.get('February 2025', 0)
-                
-                # Prepare data for pie chart
-                labels = ['January 2025', 'February 2025']
-                values = [january_reviews, february_reviews]
-                
-                # Create pie chart
-                fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.3)])
-                fig.update_layout(
-                    title="Toothbrush Reviews Distribution (Jan 2025 vs Feb 2025)",
-                    height=500,
-                    width=700
-                )
-                
-                st.plotly_chart(fig)
+                if len(numeric_cols) > 0:
+                    y_col = st.selectbox("Y-axis", numeric_cols)
+                    
+                    # Color options
+                    color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
+                    if color_option == "Single Color":
+                        color = st.color_picker("Pick a color", "#00f900")
+                    else:
+                        color = color_option
+
+                    # Chart customization
+                    chart_title = st.text_input("Chart Title", "Data Visualization")
+                    
+                    if st.button("Generate Chart"):
+                        fig = go.Figure()
+                        
+                        if chart_type == "Bar":
+                            fig.add_trace(go.Bar(x=df[x_col], y=df[y_col], marker_color=color if color_option == "Single Color" else None))
+                        
+                        elif chart_type == "Line":
+                            fig.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
+                        
+                        elif chart_type == "Pie":
+                            pie_data = df.groupby(x_col)[y_col].sum()
+                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                        
+                        elif chart_type == "Scatter":
+                            fig.add_trace(go.Scatter(
+                                x=df[x_col], 
+                                y=df[y_col], 
+                                mode='markers',
+                                marker=dict(
+                                    color=df[color] if color_option != "Single Color" else color,
+                                    size=10
+                                )
+                            ))
+                        
+                        elif chart_type == "Area":
+                            fig.add_trace(go.Scatter(
+                                x=df[x_col], 
+                                y=df[y_col], 
+                                fill='tozeroy',
+                                line=dict(color=color if color_option == "Single Color" else None)
+                            ))
+
+                        # Update layout
+                        fig.update_layout(
+                            title=chart_title,
+                            xaxis_title=x_col,
+                            yaxis_title=y_col,
+                            height=500,
+                            width=700
+                        )
+                        
+                        st.plotly_chart(fig)
+                else:
+                    st.warning("No numeric columns available for charting.")
             else:
-                st.warning("No Toothbrush category data found in the uploaded file.")
+                st.warning("The uploaded data is empty.")
