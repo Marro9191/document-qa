@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import re
 import numpy as np
+from datetime import datetime, timedelta
 
 # Add sidebar with menu item
 st.sidebar.title("Navigation")
@@ -101,29 +102,57 @@ if menu == "Insight Conversation":
                     # Start with a basic filter based on the question
                     relevant_df = df[potential_cols].copy()
                     
-                    # Look for conditions like "last month," "this month," "toothbrush category," etc.
-                    if "month" in question_lower:
-                        if "date" in df.columns or "month" in df.columns:
-                            # Assume a date or month column exists and filter for recent months
-                            if "date" in df.columns:
-                                df['date'] = pd.to_datetime(df['date'])
-                                recent_months = df[df['date'].dt.month >= (df['date'].dt.month.max() - 1)]
-                                relevant_df = relevant_df.merge(recent_months, how='inner')
-                            elif "month" in df.columns:
-                                recent_months = df[df['month'].isin(['January', 'February'])]  # Example, adjust as needed
-                                relevant_df = relevant_df.merge(recent_months, how='inner')
-                    
-                    if "toothbrush" in question_lower and "category" in question_lower:
+                    # Ensure 'date' or 'month' column exists and is properly formatted
+                    if "date" in df.columns:
+                        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                        # Filter for toothbrush category if it exists
                         if "category" in df.columns:
                             relevant_df = relevant_df[relevant_df['category'].str.contains("toothbrush", case=False, na=False)]
+                        # Get the last two months (e.g., January and February 2025, given current date is February 28, 2025)
+                        current_date = datetime(2025, 2, 28)  # Current date as specified
+                        last_month = current_date - timedelta(days=30)
+                        this_month = current_date
+                        relevant_df = relevant_df[
+                            (relevant_df['date'].dt.month == this_month.month) | 
+                            (relevant_df['date'].dt.month == last_month.month)
+                        ]
+                        # Aggregate reviews by month
+                        if "reviews" in relevant_df.columns:
+                            relevant_df = relevant_df.groupby(relevant_df['date'].dt.month_name())['reviews'].sum().reset_index()
+                            relevant_df.columns = ['Month', 'Total Reviews']
+                        else:
+                            st.warning("No 'reviews' column found in the data.")
+                    elif "month" in df.columns:
+                        # Handle month as a categorical column (e.g., "January", "February")
+                        if "category" in df.columns:
+                            relevant_df = relevant_df[relevant_df['category'].str.contains("toothbrush", case=False, na=False)]
+                        # Get the last two months (assuming month names or numbers)
+                        current_month = current_date.month
+                        last_month_num = (current_month - 1) % 12 or 12  # Handle January (1) -> December (12)
+                        month_names = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May', 6: 'June',
+                                      7: 'July', 8: 'August', 9: 'September', 10: 'October', 11: 'November', 12: 'December'}
+                        relevant_df = relevant_df[
+                            relevant_df['month'].isin([month_names[current_month], month_names[last_month_num]])
+                        ]
+                        # Aggregate reviews by month
+                        if "reviews" in relevant_df.columns:
+                            relevant_df = relevant_df.groupby('month')['reviews'].sum().reset_index()
+                            relevant_df.columns = ['Month', 'Total Reviews']
+                        else:
+                            st.warning("No 'reviews' column found in the data.")
+                    else:
+                        st.warning("No 'date' or 'month' column found in the data.")
 
                 # If no relevant data is found, check if the response implies a summary or aggregation
                 if relevant_df is None or relevant_df.empty:
                     # Look for numeric summaries in the response (e.g., totals, counts)
                     numbers = re.findall(r'\d+', response)
                     if numbers and potential_cols:
-                        # Create a small summary table if possible
-                        summary_data = {col: [int(num) if num.isdigit() else 0 for num in numbers[:len(potential_cols)]] for col in potential_cols}
+                        # Create a small summary table if possible (e.g., for last and this month)
+                        summary_data = {
+                            'Month': ['Last Month', 'This Month'],
+                            'Total Reviews': [int(numbers[0]) if numbers else 0, int(numbers[1]) if len(numbers) > 1 else 0]
+                        }
                         relevant_df = pd.DataFrame(summary_data)
                 
                 # Display relevant data if available
@@ -147,15 +176,13 @@ if menu == "Insight Conversation":
                 categorical_cols = relevant_df.select_dtypes(include=['object', 'category']).columns
 
                 # Automatically select X-axis (categorical or date/time column preferred)
-                x_col = None
-                if "date" in relevant_df.columns or "month" in relevant_df.columns:
-                    x_col = "date" if "date" in relevant_df.columns else "month"
-                elif categorical_cols.any():
+                x_col = 'Month' if 'Month' in relevant_df.columns else None
+                if not x_col and categorical_cols.any():
                     x_col = categorical_cols[0]  # Default to first categorical column
 
                 # Automatically select Y-axis (numeric column preferred)
-                y_col = None
-                if numeric_cols.any():
+                y_col = 'Total Reviews' if 'Total Reviews' in relevant_df.columns else None
+                if not y_col and numeric_cols.any():
                     y_col = numeric_cols[0]  # Default to first numeric column
 
                 # Automatically predict chart types based on query (if no explicit chart is specified)
@@ -202,11 +229,11 @@ if menu == "Insight Conversation":
                 # Automatically summarize the title based on the query
                 keywords = []
                 if "month" in question_lower or "date" in question_lower:
-                    keywords.append("Monthly" if "month" in question_lower else "Time-based")
+                    keywords.append("Monthly")
                 if "toothbrush" in question_lower and "category" in question_lower:
                     keywords.append("Toothbrush")
-                if "reviews" in question_lower or "sales" in question_lower or y_col.lower() in question_lower:
-                    keywords.append(y_col if y_col else "Metrics")
+                if "reviews" in question_lower or y_col.lower() in question_lower:
+                    keywords.append("Reviews")
                 if x_col and x_col.lower() in question_lower:
                     keywords.append(x_col.capitalize())
 
