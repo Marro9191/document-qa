@@ -3,7 +3,6 @@ from openai import OpenAI
 import pandas as pd
 import plotly.graph_objects as go
 import re
-import numpy as np
 
 # Add sidebar with menu item
 st.sidebar.title("Navigation")
@@ -171,19 +170,8 @@ if menu == "Insight Conversation":
                 color_option = "Single Color"
                 color = "#00f900"  # Default green color
 
-                # Automatically summarize the title based on the query
-                keywords = []
-                if "month" in question_lower or "date" in question_lower:
-                    keywords.append("Monthly" if "month" in question_lower else "Time-based")
-                if "toothbrush" in question_lower and "category" in question_lower:
-                    keywords.append("Toothbrush")
-                if "reviews" in question_lower or "sales" in question_lower or y_col.lower() in question_lower:
-                    keywords.append(y_col if y_col else "Metrics")
-                if x_col and x_col.lower() in question_lower:
-                    keywords.append(x_col.capitalize())
-
-                # Create a concise title
-                chart_title = " ".join(keywords) if keywords else f"Visualization for: {question[:30]}..."  # Limit to 30 chars if no keywords
+                # Chart title based on the question
+                chart_title = f"Visualization for: {question}"
 
                 # Generate the chart automatically
                 if x_col and y_col:
@@ -200,33 +188,11 @@ if menu == "Insight Conversation":
                         fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
                     
                     elif chart_type == "Scatter":
-                        # Add scatter plot
                         fig.add_trace(go.Scatter(
                             x=relevant_df[x_col], 
                             y=relevant_df[y_col], 
                             mode='markers',
-                            marker=dict(color=color, size=10),
-                            name='Data Points'
-                        ))
-                        # Add trend line (linear regression)
-                        x = np.array(relevant_df[x_col].astype(float) if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else range(len(relevant_df)))
-                        y = np.array(relevant_df[y_col].astype(float))
-                        coefficients = np.polyfit(x, y, 1)  # Linear regression (degree 1)
-                        trend_line = np.polyval(coefficients, x)
-                        fig.add_trace(go.Scatter(
-                            x=x if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else relevant_df[x_col],
-                            y=trend_line,
-                            mode='lines',
-                            line=dict(color='red', dash='dash'),
-                            name='Trend Line'
-                        ))
-                    
-                    elif chart_type == "Area":
-                        fig.add_trace(go.Scatter(
-                            x=relevant_df[x_col], 
-                            y=relevant_df[y_col], 
-                            fill='tozeroy',
-                            line=dict(color=color)
+                            marker=dict(color=color, size=10)
                         ))
 
                     # Update layout
@@ -235,32 +201,28 @@ if menu == "Insight Conversation":
                         xaxis_title=x_col,
                         yaxis_title=y_col,
                         height=500,
-                        width=700,
-                        showlegend=True  # Show legend for trend line and data points
+                        width=700
                     )
                     
                     st.plotly_chart(fig)
                 else:
                     st.warning("No suitable columns found for automatic visualization. Please manually select fields below.")
 
-                # Customize the visualization manually, using all options from the original DataFrame (df)
+                # Optionally, allow manual overrides with selectboxes for user flexibility
                 st.write("Or customize the visualization manually:")
                 manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(chart_type))
-                manual_x_col = st.selectbox("X-axis", df.columns, index=df.columns.get_loc(x_col) if x_col and x_col in df.columns else 0)
-                manual_numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+                manual_x_col = st.selectbox("X-axis", relevant_df.columns, index=relevant_df.columns.get_loc(x_col) if x_col else 0)
+                manual_numeric_cols = relevant_df.select_dtypes(include=['int64', 'float64']).columns
                 manual_y_col = st.selectbox("Y-axis", manual_numeric_cols, index=manual_numeric_cols.get_loc(y_col) if y_col and y_col in manual_numeric_cols else 0)
                 
-                # Add option for trend line in manual customization
-                show_trend_line = st.checkbox("Show Trend Line", value=False, disabled=manual_chart_type != "Scatter")
-                
-                # Color options for manual customization, using all columns from df
-                manual_color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist(), index=0 if color_option == "Single Color" else (df.columns.get_loc(color_option) + 1 if color_option in df.columns else 0))
+                # Color options for manual customization
+                manual_color_option = st.selectbox("Color by", ["Single Color"] + relevant_df.columns.tolist(), index=0 if color_option == "Single Color" else relevant_df.columns.get_loc(color_option) + 1)
                 if manual_color_option == "Single Color":
                     manual_color = st.color_picker("Pick a color", "#00f900")
                 else:
                     manual_color = manual_color_option
 
-                # Chart title for manual customization (use the automatic title as default)
+                # Chart title for manual customization
                 manual_chart_title = st.text_input("Chart Title", chart_title)
                 
                 if st.button("Generate Custom Chart"):
@@ -277,27 +239,15 @@ if menu == "Insight Conversation":
                         fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
                     
                     elif manual_chart_type == "Scatter":
-                        # Add scatter plot
                         fig.add_trace(go.Scatter(
                             x=relevant_df[manual_x_col], 
                             y=relevant_df[manual_y_col], 
                             mode='markers',
-                            marker=dict(color=manual_color if manual_color_option == "Single Color" else relevant_df[manual_color], size=10),
-                            name='Data Points'
+                            marker=dict(
+                                color=relevant_df[manual_color] if manual_color_option != "Single Color" else manual_color,
+                                size=10
+                            )
                         ))
-                        # Add trend line if selected
-                        if show_trend_line:
-                            x = np.array(relevant_df[manual_x_col].astype(float) if pd.api.types.is_numeric_dtype(relevant_df[manual_x_col]) else range(len(relevant_df)))
-                            y = np.array(relevant_df[manual_y_col].astype(float))
-                            coefficients = np.polyfit(x, y, 1)  # Linear regression (degree 1)
-                            trend_line = np.polyval(coefficients, x)
-                            fig.add_trace(go.Scatter(
-                                x=x if pd.api.types.is_numeric_dtype(relevant_df[manual_x_col]) else relevant_df[manual_x_col],
-                                y=trend_line,
-                                mode='lines',
-                                line=dict(color='red', dash='dash'),
-                                name='Trend Line'
-                            ))
                     
                     elif manual_chart_type == "Area":
                         fig.add_trace(go.Scatter(
@@ -313,8 +263,7 @@ if menu == "Insight Conversation":
                         xaxis_title=manual_x_col,
                         yaxis_title=manual_y_col,
                         height=500,
-                        width=700,
-                        showlegend=show_trend_line  # Show legend only if trend line is present
+                        width=700
                     )
                     
                     st.plotly_chart(fig)
