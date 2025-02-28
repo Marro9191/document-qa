@@ -81,7 +81,7 @@ if menu == "Insight Conversation":
         if df is not None:
             st.subheader("Data Visualizations")
             
-            # Filter data table based on user query (e.g., Toothbrush, reviews, date)
+            # Filter data table based on user query dynamically
             filtered_df = df.copy()
             show_full_table = "full table" in question.lower() or "all data" in question.lower()
             
@@ -90,46 +90,46 @@ if menu == "Insight Conversation":
                 st.write("Full Data Table:")
                 st.dataframe(df)
             else:
-                # Filter for relevant data only
+                # Dynamically filter for relevant data based on query
                 keywords = question.lower().split()
                 relevant_columns = []
                 date_col = None
                 numeric_col = None
 
-                # Identify relevant columns based on query keywords
+                # Identify relevant columns (date, numeric, and others) based on query
                 for col in df.columns:
                     if any(keyword in col.lower() for keyword in keywords):
                         relevant_columns.append(col)
-                    if 'date' in col.lower():
+                    if 'date' in col.lower() or 'time' in col.lower():
                         date_col = col
 
-                # Check for numeric columns more thoroughly, matching query keywords
+                # Identify numeric columns based on query keywords
                 numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 if numeric_cols.any():
                     for col in numeric_cols:
-                        if any(keyword in col.lower() for keyword in keywords):
+                        if any(keyword in col.lower() for keyword in keywords) or \
+                           any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
                             numeric_col = col
                             break
-                    # If no specific numeric column is found, fall back to any numeric column mentioned in query
+                    # If no specific numeric column is found, fall back to any numeric column implied by query
                     if not numeric_col:
                         for col in numeric_cols:
-                            if any(keyword in col.lower() for keyword in keywords):
+                            if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
                                 numeric_col = col
                                 break
 
                 # Filter data based on identified columns and date if available
                 if relevant_columns or date_col or numeric_col:
-                    if date_col:
-                        if date_col in df.columns and not df[date_col].isnull().all():
-                            try:
-                                filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
-                                # Try to convert date column to datetime with error handling
-                                filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], errors='coerce').dt.strftime('%Y-%m')
-                            except (ValueError, TypeError) as e:
-                                st.warning(f"Could not parse date column '{date_col}' due to: {e}. Using original format.")
-                                filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
-                        else:
-                            st.warning(f"Date column '{date_col}' not found or is empty.")
+                    columns_to_include = []
+                    if date_col and date_col in df.columns and not df[date_col].isnull().all():
+                        try:
+                            columns_to_include.append(date_col)
+                            filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
+                            # Try to convert date column to datetime with error handling
+                            filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], errors='coerce').dt.strftime('%Y-%m')
+                        except (ValueError, TypeError) as e:
+                            st.warning(f"Could not parse date column '{date_col}' due to: {e}. Using original format.")
+                            filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
                     else:
                         filtered_df = df[relevant_columns] if relevant_columns else df
 
@@ -141,11 +141,14 @@ if menu == "Insight Conversation":
                             except KeyError as e:
                                 st.warning(f"Error grouping by date and numeric column: {e}")
                     elif numeric_col:
-                        filtered_df = filtered_df[[numeric_col] + relevant_columns]
+                        if numeric_col in filtered_df.columns:
+                            columns_to_include.append(numeric_col)
+                            filtered_df = filtered_df[columns_to_include + relevant_columns]
 
                 # Display only relevant data table
                 if not filtered_df.empty:
-                    st.write("Relevant Data Table (including dates if available):")
+                    st.write("Relevant Data Table (including dates and numeric data if available):")
+                    st.write("Debug: Filtered DataFrame columns:", filtered_df.columns.tolist())  # Debugging output
                     st.dataframe(filtered_df)
                 else:
                     st.warning("No relevant data found for the query.")
@@ -171,18 +174,19 @@ if menu == "Insight Conversation":
                     color = "#00f900"  # Default green color
 
                     # Find date column if available
-                    date_cols = [col for col in filtered_df.columns if 'date' in col.lower()]
+                    date_cols = [col for col in filtered_df.columns if 'date' in col.lower() or 'time' in col.lower()]
                     date_col = date_cols[0] if date_cols else None
 
-                    # Find numeric columns mentioned in the query, prioritizing exact matches
+                    # Find numeric columns mentioned or implied in the query
                     for col in numeric_cols:
-                        if any(keyword in col.lower() for keyword in question.lower().split()):
+                        if any(keyword in col.lower() for keyword in question.lower().split()) or \
+                           any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
                             y_col = col
                             break
-                    # If no exact match, fall back to any numeric column implied by query
+                    # If no specific numeric column is found, fall back to any numeric column implied by query
                     if not y_col:
                         for col in numeric_cols:
-                            if any(keyword in question.lower() for keyword in ["number", "total", "count", "value", "reviews"]):
+                            if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
                                 y_col = col
                                 break
                         if not y_col:
