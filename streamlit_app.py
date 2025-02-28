@@ -3,6 +3,7 @@ from openai import OpenAI
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 # Add sidebar with menu item
 st.sidebar.title("Navigation")
@@ -35,7 +36,7 @@ if menu == "Insight Conversation":
     # Question input
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category? Or: Please provide me reviews month over month?",
+        placeholder="Examples: What were total number of reviews last month compared to this month for tootbrush category? Or: Please provide me reviews month over month? Or: Which of our promos drove most sales for last two months?",
         disabled=not uploaded_file,
     )
 
@@ -118,7 +119,6 @@ if menu == "Insight Conversation":
 
         # Query 2: Month over month reviews
         elif "reviews" in question.lower() and "month over month" in question.lower():
-            # Group by month and year
             df['month_year'] = df['date'].dt.to_period('M')
             monthly_reviews = df.groupby('month_year')['reviews'].sum().reset_index()
             monthly_reviews['month_year'] = monthly_reviews['month_year'].astype(str)
@@ -142,6 +142,56 @@ if menu == "Insight Conversation":
                 title="Reviews Trend Month over Month",
                 xaxis_title="Month",
                 yaxis_title="Number of Reviews",
+                height=500,
+                width=700,
+                xaxis=dict(tickangle=45)
+            )
+            
+            st.plotly_chart(fig)
+
+        # Query 3: Promos driving most sales for last two months
+        elif "promos" in question.lower() and "sales" in question.lower() and "last two months" in question.lower():
+            current_date = datetime.now()
+            two_months_ago = current_date - relativedelta(months=2)
+            
+            # Filter for last two months
+            df_last_two_months = df[df['date'] >= two_months_ago]
+            df_last_two_months['month_year'] = df_last_two_months['date'].dt.to_period('M')
+            
+            # Group by promo and month
+            promo_sales = df_last_two_months.groupby(['promo', 'month_year'])['Sales'].sum().reset_index()
+            promo_sales['month_year'] = promo_sales['month_year'].astype(str)
+            
+            # Get unique months and promos
+            months = promo_sales['month_year'].unique()
+            promos = promo_sales['promo'].unique()
+
+            st.subheader("Analysis Results")
+            st.write("Sales by Promo for Last Two Months:")
+            st.dataframe(promo_sales)
+
+            # Create grouped bar chart
+            st.subheader("Visualization")
+            fig = go.Figure()
+            
+            colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD']  # Add more colors if needed
+            
+            for i, month in enumerate(months):
+                month_data = promo_sales[promo_sales['month_year'] == month]
+                fig.add_trace(
+                    go.Bar(
+                        x=month_data['promo'],
+                        y=month_data['Sales'],
+                        name=month,
+                        marker_color=colors[i % len(colors)]
+                    )
+                )
+
+            fig.update_layout(
+                title="Sales by Promo for Last Two Months",
+                xaxis_title="Promo Code",
+                yaxis_title="Sales",
+                barmode='group',
                 height=500,
                 width=700,
                 xaxis=dict(tickangle=45)
