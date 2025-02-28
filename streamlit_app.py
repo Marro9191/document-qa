@@ -55,23 +55,26 @@ if menu == "Insight Conversation":
             }
         ]
 
-        # Check if we should skip the OpenAI response
-        show_openai_response = not ("reviews" in question.lower() and 
-                                   "last month" in question.lower() and 
-                                   "this month" in question.lower() and 
-                                   "toothbrush" in question.lower())
+        # Check if we should skip the OpenAI response for the specific question
+        show_openai_response = not (
+            question.lower() == "what were total number of reviews last month compared to this month for tootbrush category?" or
+            question.lower() == "what were total number of reviews last month compared to this month for toothbrush category?"
+        )
 
-        # Generate and display OpenAI response only if not skipping
+        # Generate answer using OpenAI only if we need to show the response
         if show_openai_response:
-            stream = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,
-                stream=True,
-            )
+            try:
+                stream = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=messages,
+                    stream=True,
+                )
 
-            # Display response
-            st.subheader("Response")
-            st.write_stream(stream)
+                # Display response
+                st.subheader("Response")
+                st.write_stream(stream)
+            except Exception as e:
+                st.error(f"Error generating response from OpenAI: {e}")
 
         # Custom analysis for review comparison query
         if "reviews" in question.lower() and "last month" in question.lower() and "this month" in question.lower():
@@ -103,7 +106,7 @@ if menu == "Insight Conversation":
             this_month_reviews = this_month_data['reviews'].sum()
             last_month_reviews = last_month_data['reviews'].sum()
 
-            # Display results (no OpenAI response here)
+            # Display results (no OpenAI response for this specific question)
             st.subheader("Analysis Results")
             st.write(f"Total Reviews This Month: {this_month_reviews}")
             st.write(f"Total Reviews Last Month: {last_month_reviews}")
