@@ -98,15 +98,15 @@ if menu == "Insight Conversation":
             else:
                 # Dynamically parse the OpenAI response to extract data points
                 parsed_data = {}
-                labels = re.findall(r'[A-Za-z]+\s*\d*', response_text)  # Extract labels (e.g., months, categories)
+                months = re.findall(r'january|february|march|april|may|june|july|august|september|october|november|december', response_text.lower())
                 numbers = re.findall(r'\d+', response_text)  # Extract numbers (totals)
 
-                # Match labels and numbers, assuming numbers follow labels in the response
-                if labels and numbers:
-                    for i in range(min(len(labels), len(numbers))):
-                        label = labels[i].strip().capitalize()
+                # Match months and numbers, assuming numbers follow months in the response
+                if months and numbers:
+                    for i in range(min(len(months), len(numbers))):
+                        month = months[i].capitalize()
                         value = int(numbers[i])
-                        parsed_data[label] = value
+                        parsed_data[month] = value
 
                 # Identify relevant columns in the DataFrame based on response and query
                 keywords = question.lower().split()
@@ -114,9 +114,9 @@ if menu == "Insight Conversation":
                 numeric_col = None
                 category_col = None
 
-                # Identify date, numeric, and category columns dynamically
+                # Identify date, numeric, and category columns dynamically, avoiding numeric as date
                 for col in df.columns:
-                    if any(keyword in col.lower() for keyword in keywords + ['date', 'time']):
+                    if any(keyword in col.lower() for keyword in keywords + ['date', 'time']) and not pd.api.types.is_numeric_dtype(df[col]):
                         date_col = col
                     if pd.api.types.is_numeric_dtype(df[col]) and any(keyword in col.lower() for keyword in keywords + ['number', 'count', 'total', 'value', 'review']):
                         numeric_col = col
@@ -127,17 +127,15 @@ if menu == "Insight Conversation":
                 filtered_df = df.copy()
                 if date_col and numeric_col:
                     # Filter for relevant category if mentioned in query or response
-                    if any('category' in q.lower() for q in keywords) or any(label.lower() in response_text.lower() for label in labels if label):
+                    if 'toothbrush' in question.lower() and category_col and category_col in df.columns:
+                        filtered_df = filtered_df[filtered_df[category_col].str.lower() == 'toothbrush'].copy()
+                    elif any(label.lower() in response_text.lower() for label in parsed_data.keys() if label):
                         if category_col and category_col in df.columns:
-                            # Try to match any category mentioned in response or query
-                            for label in labels:
+                            for label in parsed_data.keys():
                                 if label.lower() in response_text.lower():
                                     category_value = label.lower()
                                     filtered_df = filtered_df[filtered_df[category_col].str.lower() == category_value].copy()
                                     break
-                            # Fallback to Toothbrush if mentioned in query
-                            if filtered_df.empty and 'toothbrush' in question.lower():
-                                filtered_df = filtered_df[filtered_df[category_col].str.lower() == 'toothbrush'].copy()
 
                     # Convert date column to datetime with flexible format
                     try:
@@ -161,25 +159,18 @@ if menu == "Insight Conversation":
 
                 # Dynamically generate the most relevant graph based on the OpenAI response and data
                 if not filtered_df.empty and date_col and numeric_col:
-                    # Map response labels to DataFrame data for comparison
-                    response_labels = list(parsed_data.keys())
-                    df_values = filtered_df[date_col].unique().tolist()
+                    # Map response months to DataFrame months for comparison
+                    response_months = list(parsed_data.keys())
+                    df_months = filtered_df[date_col].unique().tolist()
                     df_numeric_values = filtered_df[numeric_col].tolist()
 
-                    # Match response labels (e.g., months) to DataFrame months
+                    # Match response months to DataFrame months and values
                     chart_data = {}
-                    for label in response_labels:
-                        # Convert label to month format (e.g., "January" -> "2025-01") or try direct matching
-                        try:
-                            month_str = pd.to_datetime(label, format='%B', errors='coerce').strftime('%Y-%m')  # Try as month name
-                            if month_str in df_values:
-                                idx = df_values.index(month_str)
-                                chart_data[label] = df_numeric_values[idx]
-                        except (ValueError, TypeError):
-                            # If not a month, try direct string matching (e.g., categories or custom labels)
-                            if label.lower() in [str(val).lower() for val in df_values]:
-                                idx = [str(val).lower() for val in df_values].index(label.lower())
-                                chart_data[label] = df_numeric_values[idx]
+                    for month in response_months:
+                        month_str = pd.to_datetime(month, format='%B').strftime('%Y-%m')  # Convert month name to YYYY-MM
+                        if month_str in df_months:
+                            idx = df_months.index(month_str)
+                            chart_data[month] = df_numeric_values[idx]
 
                     if chart_data:
                         # Determine the most relevant chart type based on query and response
