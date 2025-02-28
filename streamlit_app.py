@@ -110,6 +110,12 @@ if menu == "Insight Conversation":
                         if any(keyword in col.lower() for keyword in keywords):
                             numeric_col = col
                             break
+                    # If no specific numeric column is found, fall back to any numeric column mentioned in query
+                    if not numeric_col:
+                        for col in numeric_cols:
+                            if any(keyword in col.lower() for keyword in keywords):
+                                numeric_col = col
+                                break
 
                 # Filter data based on identified columns and date if available
                 if relevant_columns or date_col or numeric_col:
@@ -168,11 +174,19 @@ if menu == "Insight Conversation":
                     date_cols = [col for col in filtered_df.columns if 'date' in col.lower()]
                     date_col = date_cols[0] if date_cols else None
 
-                    # Find numeric columns mentioned in the query
+                    # Find numeric columns mentioned in the query, prioritizing exact matches
                     for col in numeric_cols:
                         if any(keyword in col.lower() for keyword in question.lower().split()):
                             y_col = col
                             break
+                    # If no exact match, fall back to any numeric column implied by query
+                    if not y_col:
+                        for col in numeric_cols:
+                            if any(keyword in question.lower() for keyword in ["number", "total", "count", "value", "reviews"]):
+                                y_col = col
+                                break
+                        if not y_col:
+                            y_col = numeric_cols[0]  # Last resort: use first numeric column
 
                     # Set X-axis (prefer date if available, otherwise first non-numeric column)
                     if date_col:
@@ -188,10 +202,6 @@ if menu == "Insight Conversation":
                     else:
                         non_numeric_cols = [col for col in filtered_df.columns if col not in numeric_cols]
                         x_col = non_numeric_cols[0] if non_numeric_cols else filtered_df.columns[0]
-
-                    # Default to first numeric column if no specific numeric column is mentioned
-                    if not y_col:
-                        y_col = numeric_cols[0]
 
                     # Determine chart type based on query without assuming specific column names
                     if date_col and y_col and any(keyword in question.lower() for keyword in ["trend", "over time", "monthly", "daily"]):
