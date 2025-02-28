@@ -73,9 +73,13 @@ if menu == "Insight Conversation":
             stream=True,
         )
 
-        # Display the response
+        # Collect and display the streamed response
+        response_text = ""
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                response_text += chunk.choices[0].delta.content
         st.subheader("Response")
-        st.write_stream(stream)
+        st.write(response_text)
 
         # If it's a data file (CSV/Excel), offer visualization options based on user input and file data
         if df is not None:
