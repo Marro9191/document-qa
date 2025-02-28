@@ -91,15 +91,43 @@ if menu == "Insight Conversation":
                 st.dataframe(df)
             else:
                 # Filter for relevant data only
-                if "toothbrush" in question.lower() and "reviews" in question.lower():
-                    filtered_df = df[df['Category'].str.lower() == 'toothbrush'] if 'Category' in df.columns else df
-                    if 'Date' in df.columns:
-                        filtered_df['Date'] = pd.to_datetime(filtered_df['Date']).dt.strftime('%Y-%m')
-                        filtered_df = filtered_df.groupby('Date')['Reviews'].sum().reset_index()
-                
+                keywords = question.lower().split()
+                relevant_columns = []
+                date_col = None
+                numeric_col = None
+
+                # Identify relevant columns based on query keywords
+                for col in df.columns:
+                    if any(keyword in col.lower() for keyword in keywords):
+                        relevant_columns.append(col)
+                    if 'date' in col.lower():
+                        date_col = col
+                    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+                    if numeric_cols.any():
+                        for num_col in numeric_cols:
+                            if any(keyword in num_col.lower() for keyword in keywords):
+                                numeric_col = num_col
+                                break
+                        if numeric_col:
+                            break
+
+                # Filter data based on identified columns and date if available
+                if relevant_columns or date_col or numeric_col:
+                    if date_col:
+                        filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
+                        filtered_df[date_col] = pd.to_datetime(filtered_df[date_col]).dt.strftime('%Y-%m')
+                    else:
+                        filtered_df = df[relevant_columns] if relevant_columns else df
+
+                    # If numeric column is identified, aggregate or filter further
+                    if numeric_col and date_col:
+                        filtered_df = filtered_df.groupby(date_col)[numeric_col].sum().reset_index()
+                    elif numeric_col:
+                        filtered_df = filtered_df[[numeric_col] + relevant_columns]
+
                 # Display only relevant data table
                 if not filtered_df.empty:
-                    st.write("Relevant Data Table (including dates):")
+                    st.write("Relevant Data Table (including dates if available):")
                     st.dataframe(filtered_df)
                 else:
                     st.warning("No relevant data found for the query.")
@@ -109,76 +137,86 @@ if menu == "Insight Conversation":
                 numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
                 if len(numeric_cols) > 0:
                     # Determine the most relevant chart type and data based on the query
-                    if "toothbrush" in question.lower() and "reviews" in question.lower() and 'Date' in filtered_df.columns:
-                        # Time-series data (e.g., reviews by month) – use Bar or Line chart
-                        chart_type = "Bar"  # Default to Bar for time-series, but Line could also work
-                        x_col = 'Date'
-                        y_col = 'Reviews'
-                        title = "Toothbrush Reviews by Month"
-                        color = "#00f900"  # Default single color (green, as in your example)
+                    x_col = None
+                    y_col = None
+                    chart_type = None
+                    title = "Data Visualization"
+                    color = "#00f900"  # Default green color
 
-                    elif "performance" in question.lower() and 'Date' in filtered_df.columns:
-                        # Example for performance vs. date (like your screenshot) – use Bar chart
-                        chart_type = "Bar"
-                        x_col = 'Date'
-                        y_col = 'Performance' if 'Performance' in numeric_cols else numeric_cols[0]
-                        title = "Date vs Performance"
-                        color = "#00f900"  # Green, matching your screenshot
+                    # Find date column if available
+                    date_cols = [col for col in filtered_df.columns if 'date' in col.lower()]
+                    date_col = date_cols[0] if date_cols else None
 
-                    elif any(keyword in question.lower() for keyword in ["distribution", "percentage", "proportion"]):
-                        # Categorical or percentage data – use Pie chart
-                        chart_type = "Pie"
-                        x_col = filtered_df.columns[0]  # Default to first column for categories
-                        y_col = numeric_cols[0]  # Default to first numeric column for values
-                        title = f"Distribution of {y_col} by {x_col}"
-                        color = None  # Pie chart uses default colors
+                    # Find numeric columns mentioned in the query
+                    for col in numeric_cols:
+                        if any(keyword in col.lower() for keyword in question.lower().split()):
+                            y_col = col
+                            break
 
+                    # Set X-axis (prefer date if available, otherwise first non-numeric column)
+                    if date_col:
+                        x_col = date_col
                     else:
-                        # Default to Bar chart for other numeric comparisons
-                        chart_type = "Bar"
-                        x_col = 'Date' if 'Date' in filtered_df.columns else filtered_df.columns[0]
-                        y_col = numeric_cols[0]
+                        non_numeric_cols = [col for col in filtered_df.columns if col not in numeric_cols]
+                        x_col = non_numeric_cols[0] if non_numeric_cols else filtered_df.columns[0]
+
+                    # Determine chart type based on query
+                    if date_col and y_col and any(keyword in question.lower() for keyword in ["trend", "over time", "monthly", "daily"]):
+                        chart_type = "Line"  # Time-series data
+                        title = f"{y_col} Trend Over {x_col}"
+                    elif date_col and y_col and any(keyword in question.lower() for keyword in ["compare", "comparison", "vs"]):
+                        chart_type = "Bar"  # Comparison over time
+                        title = f"{y_col} vs {x_col}"
+                    elif any(keyword in question.lower() for keyword in ["distribution", "percentage", "proportion"]):
+                        chart_type = "Pie"  # Categorical or percentage data
+                        x_col = filtered_df.columns[0]  # Use first column for categories
+                        y_col = numeric_cols[0]  # Use first numeric for values
+                        title = f"Distribution of {y_col} by {x_col}"
+                    elif y_col and x_col:
+                        chart_type = "Bar"  # Default to Bar for other numeric comparisons
                         title = f"{x_col} vs {y_col}"
-                        color = "#00f900"  # Default green color
 
-                    # Generate the dynamic chart
-                    fig = go.Figure()
-                    if chart_type == "Bar":
-                        fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color))
-                    
-                    elif chart_type == "Line":
-                        fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
-                    
-                    elif chart_type == "Pie":
-                        pie_data = filtered_df.groupby(x_col)[y_col].sum()
-                        fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                    
-                    elif chart_type == "Scatter":
-                        fig.add_trace(go.Scatter(
-                            x=filtered_df[x_col], 
-                            y=filtered_df[y_col], 
-                            mode='markers',
-                            marker=dict(color=color, size=10)
-                        ))
-                    
-                    elif chart_type == "Area":
-                        fig.add_trace(go.Scatter(
-                            x=filtered_df[x_col], 
-                            y=filtered_df[y_col], 
-                            fill='tozeroy',
-                            line=dict(color=color)
-                        ))
+                    # Generate the dynamic chart if chart type is determined
+                    if chart_type and x_col and y_col and x_col in filtered_df.columns and y_col in filtered_df.columns:
+                        fig = go.Figure()
+                        if chart_type == "Bar":
+                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color))
+                        
+                        elif chart_type == "Line":
+                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
+                        
+                        elif chart_type == "Pie":
+                            pie_data = filtered_df.groupby(x_col)[y_col].sum()
+                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                        
+                        elif chart_type == "Scatter":
+                            fig.add_trace(go.Scatter(
+                                x=filtered_df[x_col], 
+                                y=filtered_df[y_col], 
+                                mode='markers',
+                                marker=dict(color=color, size=10)
+                            ))
+                        
+                        elif chart_type == "Area":
+                            fig.add_trace(go.Scatter(
+                                x=filtered_df[x_col], 
+                                y=filtered_df[y_col], 
+                                fill='tozeroy',
+                                line=dict(color=color)
+                            ))
 
-                    # Update layout with labeled axes and dynamic title
-                    fig.update_layout(
-                        title=title,
-                        xaxis_title=x_col,
-                        yaxis_title=y_col,
-                        height=500,
-                        width=700
-                    )
-                    
-                    st.plotly_chart(fig)
+                        # Update layout with labeled axes and dynamic title
+                        fig.update_layout(
+                            title=title,
+                            xaxis_title=x_col,
+                            yaxis_title=y_col,
+                            height=500,
+                            width=700
+                        )
+                        
+                        st.plotly_chart(fig)
+                    else:
+                        st.warning("Could not determine suitable columns or chart type for visualization.")
                 else:
                     st.warning("No numeric columns available for chart generation.")
             else:
