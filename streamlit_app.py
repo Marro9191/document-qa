@@ -98,9 +98,9 @@ if menu == "Insight Conversation":
                 st.write("Generate a chart:")
                 # Auto-select defaults
                 default_chart_type = "Bar"
-                default_x_col = filtered_df.columns[0] if 'Date' in filtered_df.columns else filtered_df.columns[0]
+                default_x_col = 'Date' if 'Date' in filtered_df.columns else filtered_df.columns[0]
                 numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
-                default_y_col = numeric_cols[0] if len(numeric_cols) > 0 else None
+                default_y_col = 'Reviews' if 'Reviews' in numeric_cols else (numeric_cols[0] if len(numeric_cols) > 0 else None)
                 default_color = "Single Color"
 
                 chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(default_chart_type))
@@ -117,7 +117,7 @@ if menu == "Insight Conversation":
                         color = color_option
 
                     # Chart customization (auto-suggested title)
-                    suggested_title = f"{filtered_df.columns[0]} vs {y_col}" if 'Date' in filtered_df.columns else "Data Visualization"
+                    suggested_title = f"{x_col} vs {y_col}" if 'Date' in filtered_df.columns and y_col == 'Reviews' else "Data Visualization"
                     chart_title = st.text_input("Chart Title", suggested_title)
                     
                     if st.button("Generate Chart"):
