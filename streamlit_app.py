@@ -83,86 +83,67 @@ if menu == "Insight Conversation":
             
             # Filter data table based on user query (e.g., Toothbrush, reviews, date)
             filtered_df = df.copy()
-            if "toothbrush" in question.lower() and "reviews" in question.lower():
-                filtered_df = df[df['Category'].str.lower() == 'toothbrush'] if 'Category' in df.columns else df
-                if 'Date' in df.columns:
-                    filtered_df['Date'] = pd.to_datetime(filtered_df['Date']).dt.strftime('%Y-%m')
-                    filtered_df = filtered_df.groupby('Date')['Reviews'].sum().reset_index()
+            show_full_table = "full table" in question.lower() or "all data" in question.lower()
             
-            # Display the relevant data table
-            st.write("Relevant Data Table (including dates):")
-            st.dataframe(filtered_df)
-
-            # Visualization options (auto-select defaults but keep all options)
-            if not filtered_df.empty:
-                st.write("Generate a chart:")
-                # Auto-select defaults
-                default_chart_type = "Bar"
-                default_x_col = 'Date' if 'Date' in filtered_df.columns else filtered_df.columns[0]
-                numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
-                default_y_col = 'Reviews' if 'Reviews' in numeric_cols else (numeric_cols[0] if len(numeric_cols) > 0 else None)
-                default_color = "Single Color"
-
-                chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(default_chart_type))
-                x_col = st.selectbox("X-axis", filtered_df.columns, index=filtered_df.columns.get_loc(default_x_col) if default_x_col in filtered_df.columns else 0)
-                
-                if len(numeric_cols) > 0:
-                    y_col = st.selectbox("Y-axis", numeric_cols, index=numeric_cols.get_loc(default_y_col) if default_y_col in numeric_cols else 0)
-                    
-                    # Color options (auto-select "Single Color")
-                    color_option = st.selectbox("Color by", ["Single Color"] + filtered_df.columns.tolist(), index=0)
-                    if color_option == "Single Color":
-                        color = st.color_picker("Pick a color", "#00f900")
-                    else:
-                        color = color_option
-
-                    # Chart customization (auto-suggested title)
-                    suggested_title = f"{x_col} vs {y_col}" if 'Date' in filtered_df.columns and y_col == 'Reviews' else "Data Visualization"
-                    chart_title = st.text_input("Chart Title", suggested_title)
-                    
-                    if st.button("Generate Chart"):
-                        fig = go.Figure()
-                        
-                        if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color if color_option == "Single Color" else None))
-                        
-                        elif chart_type == "Line":
-                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
-                        
-                        elif chart_type == "Pie":
-                            pie_data = filtered_df.groupby(x_col)[y_col].sum()
-                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                        
-                        elif chart_type == "Scatter":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                mode='markers',
-                                marker=dict(
-                                    color=filtered_df[color] if color_option != "Single Color" else color,
-                                    size=10
-                                )
-                            ))
-                        
-                        elif chart_type == "Area":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                fill='tozeroy',
-                                line=dict(color=color if color_option == "Single Color" else None)
-                            ))
-
-                        # Update layout with labeled axes
-                        fig.update_layout(
-                            title=chart_title,
-                            xaxis_title=x_col,
-                            yaxis_title=y_col,
-                            height=500,
-                            width=700
-                        )
-                        
-                        st.plotly_chart(fig)
-                else:
-                    st.warning("No numeric columns available for charting.")
+            if show_full_table:
+                # Show full table if explicitly requested
+                st.write("Full Data Table:")
+                st.dataframe(df)
             else:
-                st.warning("The filtered data is empty.")
+                # Filter for relevant data only
+                if "toothbrush" in question.lower() and "reviews" in question.lower():
+                    filtered_df = df[df['Category'].str.lower() == 'toothbrush'] if 'Category' in df.columns else df
+                    if 'Date' in df.columns:
+                        filtered_df['Date'] = pd.to_datetime(filtered_df['Date']).dt.strftime('%Y-%m')
+                        filtered_df = filtered_df.groupby('Date')['Reviews'].sum().reset_index()
+                
+                # Display only relevant data table
+                if not filtered_df.empty:
+                    st.write("Relevant Data Table (including dates):")
+                    st.dataframe(filtered_df)
+                else:
+                    st.warning("No relevant data found for the query.")
+
+            # Automatically generate the most relevant graph based on the query
+            if not filtered_df.empty:
+                # Determine the most relevant chart type based on the query
+                if "toothbrush" in question.lower() and "reviews" in question.lower() and 'Date' in filtered_df.columns:
+                    # Time-series data (e.g., reviews by month) – use Bar or Line chart
+                    chart_type = "Bar"  # Default to Bar, but Line could also work
+                    x_col = 'Date'
+                    y_col = 'Reviews'
+                    title = "Toothbrush Reviews by Month"
+                else:
+                    # Default to Bar chart for other queries with numeric data
+                    numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
+                    if len(numeric_cols) > 0:
+                        chart_type = "Bar"
+                        x_col = filtered_df.columns[0]  # Default X-axis to first column
+                        y_col = numeric_cols[0]  # Default Y-axis to first numeric column
+                        title = f"{x_col} vs {y_col}"
+
+                if 'x_col' in locals() and 'y_col' in locals():
+                    # Generate the automatic chart
+                    fig = go.Figure()
+                    color = "#00f900"  # Default single color
+
+                    if chart_type == "Bar":
+                        fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color))
+                    
+                    elif chart_type == "Line":
+                        fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
+
+                    # Update layout with labeled axes and summarized title
+                    fig.update_layout(
+                        title=title,
+                        xaxis_title=x_col,
+                        yaxis_title=y_col,
+                        height=500,
+                        width=700
+                    )
+                    
+                    st.plotly_chart(fig)
+                else:
+                    st.warning("No suitable columns for automatic chart generation.")
+            else:
+                st.warning("No data available for visualization.")
