@@ -73,184 +73,61 @@ if menu == "Insight Conversation":
             stream=True,
         )
 
-        # Collect and display the streamed response
-        response_text = ""
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                response_text += chunk.choices[0].delta.content
+        # Display the response
         st.subheader("Response")
-        st.write(response_text)
+        st.write_stream(stream)
 
-        # If it's a data file (CSV/Excel), offer visualization options based on user input and file data
+        # If it's a data file (CSV/Excel), offer visualization options
         if df is not None:
             st.subheader("Data Visualizations")
             
-            # Filter data table based on user query dynamically
+            # Filter data table based on user query (e.g., Toothbrush, reviews, date)
             filtered_df = df.copy()
-            show_full_table = "full table" in question.lower() or "all data" in question.lower()
+            if "toothbrush" in question.lower() and "reviews" in question.lower():
+                filtered_df = df[df['Category'].str.lower() == 'toothbrush'] if 'Category' in df.columns else df
+                if 'Date' in df.columns:
+                    filtered_df['Date'] = pd.to_datetime(filtered_df['Date']).dt.strftime('%Y-%m')
+                    filtered_df = filtered_df.groupby('Date')['Reviews'].sum().reset_index()
             
-            if show_full_table:
-                # Show full table if explicitly requested
-                st.write("Full Data Table:")
-                st.dataframe(df)
-            else:
-                # Dynamically filter for relevant data based on query
-                keywords = question.lower().split()
-                relevant_columns = []
-                date_col = None
-                numeric_col = None
-                category_col = None
+            # Display the relevant data table
+            st.write("Relevant Data Table (including dates):")
+            st.dataframe(filtered_df)
 
-                # Identify relevant columns (date, numeric, category, and others) based on query
-                for col in df.columns:
-                    if any(keyword in col.lower() for keyword in keywords):
-                        relevant_columns.append(col)
-                    if any(keyword in col.lower() for keyword in ["date", "time"]):
-                        date_col = col
-                    if 'category' in col.lower():
-                        category_col = col
-
-                # Identify numeric columns based on query keywords, prioritizing "reviews" or similar
-                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-                if numeric_cols.any():
-                    # Prioritize "reviews" or related keywords first, considering all numeric columns
-                    for col in numeric_cols:
-                        if 'review' in col.lower() or any(keyword in col.lower() for keyword in ["number", "count", "total", "value", "reviews"]):
-                            numeric_col = col
-                            break
-                    # If no exact match for "reviews," fall back to any numeric column implied by query, prioritizing keywords
-                    if not numeric_col:
-                        for col in numeric_cols:
-                            if any(keyword in col.lower() for keyword in keywords) or \
-                               any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance", "returns", "ratings", "1st page rank"]):
-                                numeric_col = col
-                                break
-                    # If still no match, use the first numeric column as a last resort (for debugging)
-                    if not numeric_col:
-                        numeric_col = numeric_cols[0]
-                        st.warning(f"No specific numeric column found for query. Defaulting to '{numeric_col}'.")
-
-                # Filter for relevant category if mentioned in query
-                if 'toothbrush' in question.lower() and category_col and category_col in df.columns:
-                    filtered_df = df[df[category_col].str.lower() == 'toothbrush'].copy()
-                else:
-                    filtered_df = df.copy()
-
-                # Filter data based on identified columns and date if available
-                if relevant_columns or date_col or numeric_col:
-                    columns_to_include = []
-                    if date_col and date_col in filtered_df.columns and not filtered_df[date_col].isnull().all():
-                        try:
-                            columns_to_include.append(date_col)
-                            filtered_df = filtered_df[[col for col in [date_col] + relevant_columns if col in filtered_df.columns]]
-                            # Try to convert date column to datetime with DD/MM/YY format
-                            filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], format='%d/%m/%y', errors='coerce').dt.strftime('%Y-%m')
-                        except (ValueError, TypeError) as e:
-                            st.warning(f"Could not parse date column '{date_col}' due to: {e}. Trying auto-detection.")
-                            filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], errors='coerce').dt.strftime('%Y-%m') if pd.api.types.is_datetime64_any_dtype(filtered_df[date_col]) else filtered_df[date_col]
-                    else:
-                        filtered_df = filtered_df[relevant_columns] if relevant_columns else filtered_df
-
-                    # If numeric column is identified, aggregate or filter further by month
-                    if numeric_col and date_col:
-                        if not filtered_df[date_col].isnull().all() and numeric_col in filtered_df.columns:
-                            try:
-                                # Group by month and sum the numeric column (e.g., Reviews)
-                                filtered_df = filtered_df.groupby(date_col)[numeric_col].sum().reset_index()
-                            except KeyError as e:
-                                st.warning(f"Error grouping by date and numeric column: {e}")
-                    elif numeric_col:
-                        if numeric_col in filtered_df.columns:
-                            columns_to_include.append(numeric_col)
-                            filtered_df = filtered_df[columns_to_include + relevant_columns]
-
-                # Display only relevant data table if data is filtered
-                if not filtered_df.empty:
-                    st.write("Relevant Data Table (including dates and numeric data if available):")
-                    st.write("Debug: Filtered DataFrame columns:", filtered_df.columns.tolist())  # Debugging output
-                    st.dataframe(filtered_df)
-                else:
-                    st.warning("No relevant data found for the query based on user input.")
-
-            # Dynamically generate the most relevant graph based on user input and file data
+            # Visualization options (auto-select defaults but keep all options)
             if not filtered_df.empty:
-                # Check for numeric columns more thoroughly
+                st.write("Generate a chart:")
+                # Auto-select defaults
+                default_chart_type = "Bar"
+                default_x_col = 'Date' if 'Date' in filtered_df.columns else filtered_df.columns[0]
                 numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
-                if numeric_cols.empty:
-                    # Try to convert columns that might be numeric but stored as strings
-                    for col in filtered_df.columns:
-                        if filtered_df[col].dtype == 'object' and filtered_df[col].str.match(r'^-?\d*\.?\d+$').all():
-                            filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
-                    numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
+                default_y_col = 'Reviews' if 'Reviews' in numeric_cols else (numeric_cols[0] if len(numeric_cols) > 0 else None)
+                default_color = "Single Color"
 
+                chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(default_chart_type))
+                x_col = st.selectbox("X-axis", filtered_df.columns, index=filtered_df.columns.get_loc(default_x_col) if default_x_col in filtered_df.columns else 0)
+                
                 if len(numeric_cols) > 0:
-                    st.write("Debug: Numeric columns found:", numeric_cols.tolist())  # Debugging output
-                    # Determine the most relevant chart type and data based on the query
-                    x_col = None
-                    y_col = None
-                    chart_type = None
-                    title = "Data Visualization"
-                    color = "#00f900"  # Default green color
-
-                    # Find date column if available
-                    date_cols = [col for col in filtered_df.columns if any(keyword in col.lower() for keyword in ["date", "time"])]
-                    date_col = date_cols[0] if date_cols else None
-
-                    # Find numeric columns mentioned or implied in the query, prioritizing "reviews" or similar
-                    for col in numeric_cols:
-                        if 'review' in col.lower() or any(keyword in col.lower() for keyword in question.lower().split()) or \
-                           any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales"]):
-                            y_col = col
-                            break
-                    # If no match for "reviews" or related, fall back to any numeric column implied by query, prioritizing keywords
-                    if not y_col:
-                        for col in numeric_cols:
-                            if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance", "returns", "ratings", "1st page rank"]):
-                                y_col = col
-                                break
-                        if not y_col:
-                            y_col = numeric_cols[0]  # Last resort: use first numeric column
-                            st.warning(f"No specific numeric column found for query. Defaulting to '{y_col}'.")
-
-                    # Set X-axis (prefer date if available, otherwise first non-numeric column)
-                    if date_col:
-                        if not filtered_df[date_col].isnull().all():
-                            try:
-                                filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], format='%d/%m/%y', errors='coerce').dt.strftime('%Y-%m')
-                                x_col = date_col
-                            except (ValueError, TypeError) as e:
-                                st.warning(f"Could not format date column '{date_col}' for chart: {e}. Using original format.")
-                                x_col = date_col
-                        else:
-                            x_col = date_col  # Use original format if datetime conversion fails
+                    y_col = st.selectbox("Y-axis", numeric_cols, index=numeric_cols.get_loc(default_y_col) if default_y_col in numeric_cols else 0)
+                    
+                    # Color options (auto-select "Single Color")
+                    color_option = st.selectbox("Color by", ["Single Color"] + filtered_df.columns.tolist(), index=0)
+                    if color_option == "Single Color":
+                        color = st.color_picker("Pick a color", "#00f900")
                     else:
-                        non_numeric_cols = [col for col in filtered_df.columns if col not in numeric_cols]
-                        x_col = non_numeric_cols[0] if non_numeric_cols else filtered_df.columns[0]
+                        color = color_option
 
-                    # Determine chart type based on query without assuming specific column names
-                    if date_col and y_col and any(keyword in question.lower() for keyword in ["trend", "over time", "monthly", "daily"]):
-                        chart_type = "Line"  # Time-series data
-                        title = f"{y_col} Trend Over {x_col}"
-                    elif date_col and y_col and any(keyword in question.lower() for keyword in ["compare", "comparison", "vs", "last month", "this month"]):
-                        chart_type = "Bar"  # Comparison over time (e.g., last month vs. this month)
-                        title = f"{y_col} Comparison Over {x_col}"
-                    elif any(keyword in question.lower() for keyword in ["distribution", "percentage", "proportion"]):
-                        chart_type = "Pie"  # Categorical or percentage data
-                        x_col = filtered_df.columns[0]  # Use first column for categories
-                        y_col = numeric_cols[0]  # Use first numeric for values
-                        title = f"Distribution of {y_col} by {x_col}"
-                    elif y_col and x_col:
-                        chart_type = "Bar"  # Default to Bar for other numeric comparisons
-                        title = f"{x_col} vs {y_col}"
-
-                    # Generate the dynamic chart if chart type is determined
-                    if chart_type and x_col and y_col and x_col in filtered_df.columns and y_col in filtered_df.columns:
+                    # Chart customization (auto-suggested title)
+                    suggested_title = f"{x_col} vs {y_col}" if 'Date' in filtered_df.columns and y_col == 'Reviews' else "Data Visualization"
+                    chart_title = st.text_input("Chart Title", suggested_title)
+                    
+                    if st.button("Generate Chart"):
                         fig = go.Figure()
+                        
                         if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color))
+                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color if color_option == "Single Color" else None))
                         
                         elif chart_type == "Line":
-                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
+                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
                         
                         elif chart_type == "Pie":
                             pie_data = filtered_df.groupby(x_col)[y_col].sum()
@@ -261,7 +138,10 @@ if menu == "Insight Conversation":
                                 x=filtered_df[x_col], 
                                 y=filtered_df[y_col], 
                                 mode='markers',
-                                marker=dict(color=color, size=10)
+                                marker=dict(
+                                    color=filtered_df[color] if color_option != "Single Color" else color,
+                                    size=10
+                                )
                             ))
                         
                         elif chart_type == "Area":
@@ -269,12 +149,12 @@ if menu == "Insight Conversation":
                                 x=filtered_df[x_col], 
                                 y=filtered_df[y_col], 
                                 fill='tozeroy',
-                                line=dict(color=color)
+                                line=dict(color=color if color_option == "Single Color" else None)
                             ))
 
-                        # Update layout with labeled axes and dynamic title
+                        # Update layout with labeled axes
                         fig.update_layout(
-                            title=title,
+                            title=chart_title,
                             xaxis_title=x_col,
                             yaxis_title=y_col,
                             height=500,
@@ -282,9 +162,7 @@ if menu == "Insight Conversation":
                         )
                         
                         st.plotly_chart(fig)
-                    else:
-                        st.warning("Could not determine suitable columns or chart type for visualization based on user input.")
                 else:
-                    st.warning("No numeric columns available for chart generation after attempting conversion.")
+                    st.warning("No numeric columns available for charting.")
             else:
-                st.warning("No data available for visualization based on user input.")
+                st.warning("The filtered data is empty.")
