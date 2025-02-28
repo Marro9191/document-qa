@@ -1,29 +1,35 @@
 import streamlit as st
 
-# ... (previous code remains the same until the question input)
+# File uploader (this should be at the top of your app or before any use of uploaded_file)
+uploaded_file = st.file_uploader(
+    "Upload a document (.txt, .md, .csv, .xlsx)",
+    type=("txt", "md", "csv", "xlsx")
+)
 
-# Ask the user for a question only after a file is uploaded
-col1, col2 = st.columns([0.9, 0.1])  # Create two columns: 90% for text area, 10% for button
+# Check if uploaded_file is None and handle it explicitly
+is_file_uploaded = uploaded_file is not None
+
+# Use columns for text area and send button
+col1, col2 = st.columns([0.9, 0.1])  # 90% for text area, 10% for button
 
 with col1:
     question = st.text_area(
         "Now ask a question about the document!",
         placeholder="For example: What were total number of reviews last month compared to this month for toothbrush category? Give me total for each month only.(Please note it has to be UTF 8 encoded)",
         key="question_input",
-        disabled=not uploaded_file,
+        disabled=not is_file_uploaded,  # Use the boolean variable for clarity
     )
 
 with col2:
-    # Create a send button styled similarly to the upload button
     send_button = st.button(
         "Send",
         key="send_button",
-        disabled=not uploaded_file or not question.strip(),  # Disable if no file or empty question
+        disabled=not is_file_uploaded or not question.strip(),  # Disable if no file or empty question
         help="Send your question about the document"
     )
 
-# Check if the button is clicked to process the question
-if send_button and uploaded_file and question:
+# Process only if the send button is clicked and conditions are met
+if send_button and is_file_uploaded and question:
     # Process the uploaded file based on its type
     file_extension = uploaded_file.name.split('.')[-1].lower()
     df = None  # DataFrame for Excel/CSV
@@ -136,5 +142,3 @@ if send_button and uploaded_file and question:
                 st.warning("No numeric columns available for charting.")
         else:
             st.warning("The uploaded data is empty.")
-
-# ... (rest of your code)
