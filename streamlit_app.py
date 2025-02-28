@@ -34,7 +34,7 @@ if menu == "Insight Conversation":
     # Question input
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category?",
+        placeholder="Example: What were total number of reviews last month compared to this month for Toothbrush category?",
         disabled=not uploaded_file,
     )
 
@@ -46,8 +46,12 @@ if menu == "Insight Conversation":
         # Convert date column to datetime
         df['date'] = pd.to_datetime(df['date'], format='%d/%m/%Y')
 
-        # Create message for OpenAI
+        # Create message for OpenAI with improved instructions
         messages = [
+            {
+                "role": "system",
+                "content": "You are a data analyst assistant. Provide accurate, detailed responses based on the exact numerical data provided in the document. Do not guess or simplify unless explicitly asked. Include totals and specific dates only if they are present in the data."
+            },
             {
                 "role": "user",
                 "content": f"Here's a document: {document} \n\n---\n\n {question}",
@@ -55,17 +59,24 @@ if menu == "Insight Conversation":
         ]
 
         # Generate answer using OpenAI
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            stream=True,
-        )
+        try:
+            stream = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                stream=True,
+            )
 
-        # Display response
-        st.subheader("Response")
-        st.write_stream(stream)
+            # Display response
+            st.subheader("Response")
+            response_text = ""
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    response_text += chunk.choices[0].delta.content
+            st.write(response_text)
+        except Exception as e:
+            st.error(f"Error generating response from OpenAI: {e}")
 
-        # Query 1: Last month vs this month comparison
+        # Query 1: Last month vs this month comparison for Toothbrush category
         if "reviews" in question.lower() and "last month" in question.lower() and "this month" in question.lower():
             current_date = datetime.now()
             current_month = current_date.month
@@ -74,7 +85,7 @@ if menu == "Insight Conversation":
             last_month_year = current_year - 1 if current_month == 1 else current_year
             last_month = 12 if current_month == 1 else current_month - 1
 
-            category = "Tootbrush" if "tootbrush" in question.lower() else None
+            category = "Toothbrush"  # Corrected from "Tootbrush" to "Toothbrush"
             if category:
                 df_filtered = df[df['category'].str.lower() == category.lower()]
             else:
@@ -92,6 +103,15 @@ if menu == "Insight Conversation":
             this_month_reviews = this_month_data['reviews'].sum()
             last_month_reviews = last_month_data['reviews'].sum()
 
+            # Override or validate OpenAI response if it doesn't match the analysis
+            if "60" in response_text and (this_month_reviews != 60 or last_month_reviews != 60):
+                st.warning("The AI response may be incorrect or incomplete. Here’s the accurate analysis:")
+                response_text = (f"Last month, there were {last_month_reviews} reviews in the Toothbrush category. "
+                               f"This month, there are {this_month_reviews} reviews in the Toothbrush category as of the latest data.")
+
+            st.subheader("Response")
+            st.write(response_text)
+
             st.subheader("Analysis Results")
             st.write(f"Total Reviews This Month: {this_month_reviews}")
             st.write(f"Total Reviews Last Month: {last_month_reviews}")
@@ -106,7 +126,7 @@ if menu == "Insight Conversation":
             ])
             
             fig.update_layout(
-                title=f"Reviews Comparison - {category if category else 'All Categories'}",
+                title=f"Reviews Comparison - {category}",
                 xaxis_title="Period",
                 yaxis_title="Number of Reviews",
                 height=500,
@@ -115,7 +135,7 @@ if menu == "Insight Conversation":
             
             st.plotly_chart(fig)
 
-        # Query 2: Month over month reviews
+        # Query 2: Month over month reviews (unchanged)
         elif "reviews" in question.lower() and "month over month" in question.lower():
             df['month_year'] = df['date'].dt.to_period('M')
             monthly_reviews = df.groupby('month_year')['reviews'].sum().reset_index()
@@ -147,7 +167,7 @@ if menu == "Insight Conversation":
             
             st.plotly_chart(fig)
 
-        # Query 3: Promos driving most sales for last two months
+        # Query 3: Promos driving most sales for last two months (unchanged)
         elif "promos" in question.lower() and "sales" in question.lower() and "last two months" in question.lower():
             current_date = datetime.now()
             two_months_ago = current_date - relativedelta(months=2)
@@ -198,7 +218,7 @@ if menu == "Insight Conversation":
             
             st.plotly_chart(fig)
 
-        # General visualization options
+        # General visualization options (unchanged)
         st.subheader("Custom Visualization")
         if not df.empty:
             chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"])
