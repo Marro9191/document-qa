@@ -73,7 +73,7 @@ if menu == "Insight Conversation":
         )
 
         # Display the response
-        st.subheader("GPT Response")
+        st.subheader("Response")
         st.write_stream(stream)
 
         # If it's a data file (CSV/Excel), offer visualization options
