@@ -4,7 +4,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import re
 import numpy as np
-from datetime import datetime, timedelta
 
 # Add sidebar with menu item
 st.sidebar.title("Navigation")
@@ -37,7 +36,7 @@ if menu == "Insight Conversation":
     # Ask the user for a question only after a file is uploaded
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="For example: What were total number of reviews last month compared to this month for toothbrush category? Please generate pie chart.",
+        placeholder="For example: What were total number of reviews last month compared to this month for toothbrush category? Give me total for each month only.",
         disabled=not uploaded_file,
     )
 
@@ -50,25 +49,11 @@ if menu == "Insight Conversation":
             document = uploaded_file.read().decode()
         
         elif file_extension == 'csv':
-            try:
-                df = pd.read_csv(uploaded_file, parse_dates=['date'], dayfirst=True)
-                # Ensure date is in DD/MM/YYYY format after reading
-                if 'date' in df.columns:
-                    df['date'] = pd.to_datetime(df['date'], errors='coerce', format='%d/%m/%Y')
-            except Exception as e:
-                st.error(f"Error reading CSV file: {e}")
-                st.stop()
+            df = pd.read_csv(uploaded_file)
             document = df.to_string()
         
         elif file_extension == 'xlsx':
-            try:
-                df = pd.read_excel(uploaded_file, parse_dates=['date'], dayfirst=True)
-                # Ensure date is in DD/MM/YYYY format after reading
-                if 'date' in df.columns:
-                    df['date'] = pd.to_datetime(df['date'], errors='coerce', format='%d/%m/%Y')
-            except Exception as e:
-                st.error(f"Error reading Excel file: {e}")
-                st.stop()
+            df = pd.read_excel(uploaded_file)
             document = df.to_string()
         
         else:
@@ -105,7 +90,7 @@ if menu == "Insight Conversation":
             # Try to parse the response and question to filter the DataFrame
             relevant_df = None
             try:
-                # Simple parsing: look for column names or conditions in the query/response
+                # Simple parsing: look for column names or conditions in the question/response
                 question_lower = question.lower()
                 response_lower = response.lower()
                 
@@ -116,69 +101,29 @@ if menu == "Insight Conversation":
                     # Start with a basic filter based on the question
                     relevant_df = df[potential_cols].copy()
                     
-                    # Ensure 'date' or 'month' column exists and is properly formatted in DD/MM/YYYY
-                    if "date" in df.columns:
-                        # Ensure date is in DD/MM/YYYY format
-                        if pd.api.types.is_datetime64_any_dtype(df['date']):
-                            relevant_df['date'] = pd.to_datetime(relevant_df['date'], errors='coerce', format='%d/%m/%Y')
-                        else:
-                            relevant_df['date'] = pd.to_datetime(relevant_df['date'], errors='coerce', format='%d/%m/%Y', dayfirst=True)
-                        # Filter for toothbrush category if it exists
+                    # Look for conditions like "last month," "this month," "toothbrush category," etc.
+                    if "month" in question_lower:
+                        if "date" in df.columns or "month" in df.columns:
+                            # Assume a date or month column exists and filter for recent months
+                            if "date" in df.columns:
+                                df['date'] = pd.to_datetime(df['date'])
+                                recent_months = df[df['date'].dt.month >= (df['date'].dt.month.max() - 1)]
+                                relevant_df = relevant_df.merge(recent_months, how='inner')
+                            elif "month" in df.columns:
+                                recent_months = df[df['month'].isin(['January', 'February'])]  # Example, adjust as needed
+                                relevant_df = relevant_df.merge(recent_months, how='inner')
+                    
+                    if "toothbrush" in question_lower and "category" in question_lower:
                         if "category" in df.columns:
                             relevant_df = relevant_df[relevant_df['category'].str.contains("toothbrush", case=False, na=False)]
-                        # Get the last two months dynamically using current date
-                        current_date = datetime.now()  # Dynamic current date
-                        last_month = current_date.replace(day=1) - timedelta(days=1)
-                        last_month = last_month.replace(day=1)
-                        this_month = current_date.replace(day=1)
-                        # Format dates as DD/MM/YYYY
-                        last_month_str = last_month.strftime('%d/%m/%Y')
-                        this_month_str = this_month.strftime('%d/%m/%Y')
-                        relevant_df = relevant_df[
-                            (relevant_df['date'].dt.strftime('%d/%m/%Y') == last_month_str) | 
-                            (relevant_df['date'].dt.strftime('%d/%m/%Y') == this_month_str)
-                        ]
-                        # Aggregate reviews by month (using formatted date)
-                        if "reviews" in relevant_df.columns:
-                            relevant_df = relevant_df.groupby(relevant_df['date'].dt.strftime('%d/%m/%Y'))['reviews'].sum().reset_index()
-                            relevant_df.columns = ['Date', 'Total Reviews']
-                        else:
-                            st.warning("No 'reviews' column found in the data.")
-                    elif "month" in df.columns:
-                        # Handle month as a categorical column (e.g., convert to DD/MM/YYYY format)
-                        if "category" in df.columns:
-                            relevant_df = relevant_df[relevant_df['category'].str.contains("toothbrush", case=False, na=False)]
-                        # Get the last two months dynamically (assuming month names or numbers, convert to DD/MM/YYYY)
-                        current_month = current_date.month
-                        last_month_num = (current_month - 1) % 12 or 12  # Handle January (1) -> December (12)
-                        month_names = {1: '01', 2: '02', 3: '03', 4: '04', 5: '05', 6: '06',
-                                      7: '07', 8: '08', 9: '09', 10: '10', 11: '11', 12: '12'}
-                        last_month_date = f"01/{month_names[last_month_num]}/{current_date.year}"
-                        this_month_date = f"01/{month_names[current_month]}/{current_date.year}"
-                        relevant_df = relevant_df[
-                            relevant_df['month'].isin([last_month_date, this_month_date])
-                        ]
-                        # Aggregate reviews by month (using formatted date)
-                        if "reviews" in relevant_df.columns:
-                            relevant_df = relevant_df.groupby('month')['reviews'].sum().reset_index()
-                            relevant_df.columns = ['Date', 'Total Reviews']
-                        else:
-                            st.warning("No 'reviews' column found in the data.")
-                    else:
-                        st.warning("No 'date' or 'month' column found in the data.")
 
                 # If no relevant data is found, check if the response implies a summary or aggregation
                 if relevant_df is None or relevant_df.empty:
                     # Look for numeric summaries in the response (e.g., totals, counts)
                     numbers = re.findall(r'\d+', response)
                     if numbers and potential_cols:
-                        # Create a small summary table if possible (e.g., for last and this month in DD/MM/YYYY format)
-                        last_month_str = (current_date.replace(day=1) - timedelta(days=1)).replace(day=1).strftime('%d/%m/%Y')
-                        this_month_str = current_date.replace(day=1).strftime('%d/%m/%Y')
-                        summary_data = {
-                            'Date': [last_month_str, this_month_str],
-                            'Total Reviews': [int(numbers[0]) if numbers else 0, int(numbers[1]) if len(numbers) > 1 else 0]
-                        }
+                        # Create a small summary table if possible
+                        summary_data = {col: [int(num) if num.isdigit() else 0 for num in numbers[:len(potential_cols)]] for col in potential_cols}
                         relevant_df = pd.DataFrame(summary_data)
                 
                 # Display relevant data if available
@@ -196,57 +141,31 @@ if menu == "Insight Conversation":
             if not relevant_df.empty:
                 st.subheader("Data Visualizations")
                 
-                # Parse the query to infer visualization fields and explicit chart type
+                # Parse the query to infer visualization fields
                 question_lower = question.lower()
                 numeric_cols = relevant_df.select_dtypes(include=['int64', 'float64']).columns
                 categorical_cols = relevant_df.select_dtypes(include=['object', 'category']).columns
 
                 # Automatically select X-axis (categorical or date/time column preferred)
-                x_col = 'Date' if 'Date' in relevant_df.columns else None
-                if not x_col and categorical_cols.any():
+                x_col = None
+                if "date" in relevant_df.columns or "month" in relevant_df.columns:
+                    x_col = "date" if "date" in relevant_df.columns else "month"
+                elif categorical_cols.any():
                     x_col = categorical_cols[0]  # Default to first categorical column
 
                 # Automatically select Y-axis (numeric column preferred)
-                y_col = 'Total Reviews' if 'Total Reviews' in relevant_df.columns else None
-                if not y_col and numeric_cols.any():
+                y_col = None
+                if numeric_cols.any():
                     y_col = numeric_cols[0]  # Default to first numeric column
 
-                # Automatically predict chart types based on query (if no explicit chart is specified)
-                predicted_chart_types = []
+                # Automatically select chart type based on query and data
+                chart_type = "Bar"  # Default to Bar chart
                 if "trend" in question_lower or "over time" in question_lower:
-                    predicted_chart_types.append("Line")
-                if "distribution" in question_lower or "proportion" in question_lower:
-                    predicted_chart_types.append("Pie")
-                if "relationship" in question_lower or "correlation" in question_lower:
-                    predicted_chart_types.append("Scatter")
-                if "comparison" in question_lower or "total" in question_lower or "count" in question_lower:
-                    predicted_chart_types.append("Bar")
-                if "area" in question_lower or "cumulative" in question_lower:
-                    predicted_chart_types.append("Area")
-                if "combo" in question_lower or "combined" in question_lower or ("trend" in question_lower and "comparison" in question_lower):
-                    predicted_chart_types.append("Combo")
-
-                # Default to Bar if no specific chart types are inferred
-                if not predicted_chart_types:
-                    predicted_chart_types = ["Bar"]
-
-                # Check for explicit chart type request in the query
-                explicit_chart_type = None
-                chart_type_patterns = {
-                    "pie": "Pie",
-                    "bar": "Bar",
-                    "line": "Line",
-                    "scatter": "Scatter",
-                    "area": "Area",
-                    "combo": "Combo"
-                }
-                for pattern, chart_type in chart_type_patterns.items():
-                    if f"please generate {pattern} chart" in question_lower or f"generate {pattern} chart" in question_lower:
-                        explicit_chart_type = chart_type
-                        break
-
-                # Use explicit chart type if specified, otherwise use predicted chart types
-                chart_types = [explicit_chart_type] if explicit_chart_type else predicted_chart_types
+                    chart_type = "Line"
+                elif "distribution" in question_lower or "proportion" in question_lower:
+                    chart_type = "Pie"
+                elif "relationship" in question_lower or "correlation" in question_lower:
+                    chart_type = "Scatter"
 
                 # Automatically select color (if applicable)
                 color_option = "Single Color"
@@ -255,89 +174,78 @@ if menu == "Insight Conversation":
                 # Automatically summarize the title based on the query
                 keywords = []
                 if "month" in question_lower or "date" in question_lower:
-                    keywords.append("Monthly")
+                    keywords.append("Monthly" if "month" in question_lower else "Time-based")
                 if "toothbrush" in question_lower and "category" in question_lower:
                     keywords.append("Toothbrush")
-                if "reviews" in question_lower or y_col.lower() in question_lower:
-                    keywords.append("Reviews")
+                if "reviews" in question_lower or "sales" in question_lower or y_col.lower() in question_lower:
+                    keywords.append(y_col if y_col else "Metrics")
                 if x_col and x_col.lower() in question_lower:
                     keywords.append(x_col.capitalize())
 
                 # Create a concise title
                 chart_title = " ".join(keywords) if keywords else f"Visualization for: {question[:30]}..."  # Limit to 30 chars if no keywords
 
-                # Generate charts automatically for the selected chart type(s)
-                for chart_type in chart_types:
-                    if x_col and y_col:
-                        fig = go.Figure()
-                        
-                        if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=relevant_df[x_col], y=relevant_df[y_col], marker_color=color))
-                        
-                        elif chart_type == "Line":
-                            fig.add_trace(go.Scatter(x=relevant_df[x_col], y=relevant_df[y_col], mode='lines', line=dict(color=color)))
-                        
-                        elif chart_type == "Pie":
-                            pie_data = relevant_df.groupby(x_col)[y_col].sum()
-                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                        
-                        elif chart_type == "Scatter":
-                            # Add scatter plot
-                            fig.add_trace(go.Scatter(
-                                x=relevant_df[x_col], 
-                                y=relevant_df[y_col], 
-                                mode='markers',
-                                marker=dict(color=color, size=10),
-                                name='Data Points'
-                            ))
-                            # Add trend line (linear regression)
-                            x = np.array(relevant_df[x_col].astype(float) if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else range(len(relevant_df)))
-                            y = np.array(relevant_df[y_col].astype(float))
-                            coefficients = np.polyfit(x, y, 1)  # Linear regression (degree 1)
-                            trend_line = np.polyval(coefficients, x)
-                            fig.add_trace(go.Scatter(
-                                x=x if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else relevant_df[x_col],
-                                y=trend_line,
-                                mode='lines',
-                                line=dict(color='red', dash='dash'),
-                                name='Trend Line'
-                            ))
-                        
-                        elif chart_type == "Area":
-                            fig.add_trace(go.Scatter(
-                                x=relevant_df[x_col], 
-                                y=relevant_df[y_col], 
-                                fill='tozeroy',
-                                line=dict(color=color)
-                            ))
-                        
-                        elif chart_type == "Combo":
-                            # Combo chart: Combine Bar and Line (e.g., bars for one metric, line for trend)
-                            fig.add_trace(go.Bar(x=relevant_df[x_col], y=relevant_df[y_col], name='Bar Data', marker_color=color))
-                            fig.add_trace(go.Scatter(x=relevant_df[x_col], y=relevant_df[y_col], mode='lines', name='Line Trend', line=dict(color='red')))
+                # Generate the chart automatically
+                if x_col and y_col:
+                    fig = go.Figure()
+                    
+                    if chart_type == "Bar":
+                        fig.add_trace(go.Bar(x=relevant_df[x_col], y=relevant_df[y_col], marker_color=color))
+                    
+                    elif chart_type == "Line":
+                        fig.add_trace(go.Scatter(x=relevant_df[x_col], y=relevant_df[y_col], mode='lines', line=dict(color=color)))
+                    
+                    elif chart_type == "Pie":
+                        pie_data = relevant_df.groupby(x_col)[y_col].sum()
+                        fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                    
+                    elif chart_type == "Scatter":
+                        # Add scatter plot
+                        fig.add_trace(go.Scatter(
+                            x=relevant_df[x_col], 
+                            y=relevant_df[y_col], 
+                            mode='markers',
+                            marker=dict(color=color, size=10),
+                            name='Data Points'
+                        ))
+                        # Add trend line (linear regression)
+                        x = np.array(relevant_df[x_col].astype(float) if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else range(len(relevant_df)))
+                        y = np.array(relevant_df[y_col].astype(float))
+                        coefficients = np.polyfit(x, y, 1)  # Linear regression (degree 1)
+                        trend_line = np.polyval(coefficients, x)
+                        fig.add_trace(go.Scatter(
+                            x=x if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else relevant_df[x_col],
+                            y=trend_line,
+                            mode='lines',
+                            line=dict(color='red', dash='dash'),
+                            name='Trend Line'
+                        ))
+                    
+                    elif chart_type == "Area":
+                        fig.add_trace(go.Scatter(
+                            x=relevant_df[x_col], 
+                            y=relevant_df[y_col], 
+                            fill='tozeroy',
+                            line=dict(color=color)
+                        ))
 
-                        # Update layout with DD/MM/YYYY format for dates on X-axis
-                        fig.update_layout(
-                            title=f"{chart_title} ({chart_type})",
-                            xaxis_title=x_col,
-                            yaxis_title=y_col,
-                            xaxis=dict(
-                                tickformat='%d/%m/%Y',  # Format X-axis ticks as DD/MM/YYYY
-                                type='category' if not pd.api.types.is_numeric_dtype(relevant_df[x_col]) else 'linear'
-                            ),
-                            height=500,
-                            width=700,
-                            showlegend=True  # Show legend for combo and scatter with trend line
-                        )
-                        
-                        st.plotly_chart(fig)
-                    else:
-                        st.warning(f"No suitable columns found for {chart_type} visualization. Please manually select fields below.")
-                        break  # Stop if no suitable columns are found
+                    # Update layout
+                    fig.update_layout(
+                        title=chart_title,
+                        xaxis_title=x_col,
+                        yaxis_title=y_col,
+                        height=500,
+                        width=700,
+                        showlegend=True  # Show legend for trend line and data points
+                    )
+                    
+                    st.plotly_chart(fig)
+                else:
+                    st.warning("No suitable columns found for automatic visualization. Please manually select fields below.")
 
                 # Customize the visualization manually, using all options from the original DataFrame (df)
                 st.write("Or customize the visualization manually:")
-                manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area", "Combo"], index=["Bar", "Line", "Pie", "Scatter", "Area", "Combo"].index(chart_types[0]) if chart_types else 0)
+                manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(chart_type))
                 manual_x_col = st.selectbox("X-axis", df.columns, index=df.columns.get_loc(x_col) if x_col and x_col in df.columns else 0)
                 manual_numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 manual_y_col = st.selectbox("Y-axis", manual_numeric_cols, index=manual_numeric_cols.get_loc(y_col) if y_col and y_col in manual_numeric_cols else 0)
@@ -398,24 +306,15 @@ if menu == "Insight Conversation":
                             fill='tozeroy',
                             line=dict(color=manual_color if manual_color_option == "Single Color" else None)
                         ))
-                    
-                    elif manual_chart_type == "Combo":
-                        # Combo chart: Combine Bar and Line (e.g., bars for one metric, line for trend)
-                        fig.add_trace(go.Bar(x=relevant_df[manual_x_col], y=relevant_df[manual_y_col], name='Bar Data', marker_color=manual_color if manual_color_option == "Single Color" else None))
-                        fig.add_trace(go.Scatter(x=relevant_df[manual_x_col], y=relevant_df[manual_y_col], mode='lines', name='Line Trend', line=dict(color='red' if manual_color_option == "Single Color" else None)))
 
-                    # Update layout with DD/MM/YYYY format for dates on X-axis
+                    # Update layout
                     fig.update_layout(
                         title=manual_chart_title,
                         xaxis_title=manual_x_col,
                         yaxis_title=manual_y_col,
-                        xaxis=dict(
-                            tickformat='%d/%m/%Y',  # Format X-axis ticks as DD/MM/YYYY
-                            type='category' if not pd.api.types.is_numeric_dtype(relevant_df[manual_x_col]) else 'linear'
-                        ),
                         height=500,
                         width=700,
-                        showlegend=show_trend_line or manual_chart_type == "Combo"  # Show legend for trend line or combo chart
+                        showlegend=show_trend_line  # Show legend only if trend line is present
                     )
                     
                     st.plotly_chart(fig)
