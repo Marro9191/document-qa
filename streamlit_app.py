@@ -170,8 +170,19 @@ if menu == "Insight Conversation":
                 color_option = "Single Color"
                 color = "#00f900"  # Default green color
 
-                # Chart title based on the question
-                chart_title = f"Visualization for: {question}"
+                # Automatically summarize the title based on the query
+                keywords = []
+                if "month" in question_lower or "date" in question_lower:
+                    keywords.append("Monthly" if "month" in question_lower else "Time-based")
+                if "toothbrush" in question_lower and "category" in question_lower:
+                    keywords.append("Toothbrush")
+                if "reviews" in question_lower or "sales" in question_lower or y_col.lower() in question_lower:
+                    keywords.append(y_col if y_col else "Metrics")
+                if x_col and x_col.lower() in question_lower:
+                    keywords.append(x_col.capitalize())
+
+                # Create a concise title
+                chart_title = " ".join(keywords) if keywords else f"Visualization for: {question[:30]}..."  # Limit to 30 chars if no keywords
 
                 # Generate the chart automatically
                 if x_col and y_col:
@@ -222,7 +233,7 @@ if menu == "Insight Conversation":
                 else:
                     manual_color = manual_color_option
 
-                # Chart title for manual customization
+                # Chart title for manual customization (use the automatic title as default)
                 manual_chart_title = st.text_input("Chart Title", chart_title)
                 
                 if st.button("Generate Custom Chart"):
