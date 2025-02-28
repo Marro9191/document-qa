@@ -114,14 +114,26 @@ if menu == "Insight Conversation":
                 # Filter data based on identified columns and date if available
                 if relevant_columns or date_col or numeric_col:
                     if date_col:
-                        filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
-                        filtered_df[date_col] = pd.to_datetime(filtered_df[date_col]).dt.strftime('%Y-%m')
+                        if date_col in df.columns and not df[date_col].isnull().all():
+                            try:
+                                filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
+                                # Try to convert date column to datetime with error handling
+                                filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], errors='coerce').dt.strftime('%Y-%m')
+                            except (ValueError, TypeError) as e:
+                                st.warning(f"Could not parse date column '{date_col}' due to: {e}. Using original format.")
+                                filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
+                        else:
+                            st.warning(f"Date column '{date_col}' not found or is empty.")
                     else:
                         filtered_df = df[relevant_columns] if relevant_columns else df
 
                     # If numeric column is identified, aggregate or filter further
                     if numeric_col and date_col:
-                        filtered_df = filtered_df.groupby(date_col)[numeric_col].sum().reset_index()
+                        if not filtered_df[date_col].isnull().all() and numeric_col in filtered_df.columns:
+                            try:
+                                filtered_df = filtered_df.groupby(date_col)[numeric_col].sum().reset_index()
+                            except KeyError as e:
+                                st.warning(f"Error grouping by date and numeric column: {e}")
                     elif numeric_col:
                         filtered_df = filtered_df[[numeric_col] + relevant_columns]
 
@@ -155,10 +167,22 @@ if menu == "Insight Conversation":
 
                     # Set X-axis (prefer date if available, otherwise first non-numeric column)
                     if date_col:
-                        x_col = date_col
+                        if not filtered_df[date_col].isnull().all():
+                            try:
+                                filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], errors='coerce').dt.strftime('%Y-%m')
+                                x_col = date_col
+                            except (ValueError, TypeError) as e:
+                                st.warning(f"Could not format date column '{date_col}' for chart: {e}. Using original format.")
+                                x_col = date_col
+                        else:
+                            x_col = date_col  # Use original format if datetime conversion fails
                     else:
                         non_numeric_cols = [col for col in filtered_df.columns if col not in numeric_cols]
                         x_col = non_numeric_cols[0] if non_numeric_cols else filtered_df.columns[0]
+
+                    # Default to first numeric column if no specific numeric column is mentioned
+                    if not y_col:
+                        y_col = numeric_cols[0]
 
                     # Determine chart type based on query
                     if date_col and y_col and any(keyword in question.lower() for keyword in ["trend", "over time", "monthly", "daily"]):
@@ -180,44 +204,4 @@ if menu == "Insight Conversation":
                     if chart_type and x_col and y_col and x_col in filtered_df.columns and y_col in filtered_df.columns:
                         fig = go.Figure()
                         if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color))
-                        
-                        elif chart_type == "Line":
-                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
-                        
-                        elif chart_type == "Pie":
-                            pie_data = filtered_df.groupby(x_col)[y_col].sum()
-                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                        
-                        elif chart_type == "Scatter":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                mode='markers',
-                                marker=dict(color=color, size=10)
-                            ))
-                        
-                        elif chart_type == "Area":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                fill='tozeroy',
-                                line=dict(color=color)
-                            ))
-
-                        # Update layout with labeled axes and dynamic title
-                        fig.update_layout(
-                            title=title,
-                            xaxis_title=x_col,
-                            yaxis_title=y_col,
-                            height=500,
-                            width=700
-                        )
-                        
-                        st.plotly_chart(fig)
-                    else:
-                        st.warning("Could not determine suitable columns or chart type for visualization.")
-                else:
-                    st.warning("No numeric columns available for chart generation.")
-            else:
-                st.warning("No data available for visualization.")
+                            fig.add_trace(go.Bar(x=filtered_df[x_col],
