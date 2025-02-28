@@ -18,15 +18,12 @@ if menu == "Insight Conversation":
         "Please note it has to be UTF-8 encoded."
     )
 
-    # Get Grok API key from Streamlit secrets
+    # Get OpenAI API key from Streamlit secrets
     try:
-        grok_api_key = st.secrets["grok"]["api_key"]
-        client = OpenAI(
-            api_key=grok_api_key,
-            base_url="https://api.x.ai/v1",  # xAI Grok API endpoint
-        )
+        openai_api_key = st.secrets["openai"]["api_key"]
+        client = OpenAI(api_key=openai_api_key)
     except KeyError:
-        st.error("Please add your Grok API key to `.streamlit/secrets.toml` under the key `grok.api_key`.")
+        st.error("Please add your OpenAI API key to `.streamlit/secrets.toml` under the key `openai.api_key`.")
         st.stop()
 
     # File uploader
@@ -38,7 +35,7 @@ if menu == "Insight Conversation":
     # Question input
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="Example: What were total number of reviews last month compared to this month for Toothbrush category?",
+        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category?",
         disabled=not uploaded_file,
     )
 
@@ -50,7 +47,7 @@ if menu == "Insight Conversation":
         # Convert date column to datetime
         df['date'] = pd.to_datetime(df['date'], format='%d/%m/%Y')
 
-        # Create message for Grok
+        # Create message for OpenAI
         messages = [
             {
                 "role": "user",
@@ -58,9 +55,9 @@ if menu == "Insight Conversation":
             }
         ]
 
-        # Generate answer using Grok
+        # Generate answer using OpenAI
         stream = client.chat.completions.create(
-            model="grok-beta",  # Use Grok model (e.g., grok-beta; adjust if Grok 3 is available)
+            model="gpt-3.5-turbo",
             messages=messages,
             stream=True,
         )
@@ -80,7 +77,7 @@ if menu == "Insight Conversation":
             last_month = 12 if current_month == 1 else current_month - 1
 
             # Filter data based on category if specified
-            category = "Toothbrush"  # Corrected from "Tootbrush" to "Toothbrush"
+            category = "Tootbrush" if "tootbrush" in question.lower() else None
             if category:
                 df_filtered = df[df['category'].str.lower() == category.lower()]
             else:
