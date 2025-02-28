@@ -144,7 +144,7 @@ if menu == "Insight Conversation":
                 else:
                     st.warning("No relevant data found for the query based on user input.")
 
-            # Automatically generate the most relevant graph based on user query and file data, performing addition (summing)
+            # Dynamically generate the most relevant graph based on user input and file data, performing addition (summing)
             if not filtered_df.empty:
                 # Check for numeric columns more thoroughly
                 numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
@@ -157,89 +157,88 @@ if menu == "Insight Conversation":
 
                 if len(numeric_cols) > 0:
                     st.write("Debug: Numeric columns found:", numeric_cols.tolist())  # Debugging output
-                    # Determine default options based on user query
-                    default_chart_type = "Bar"  # Default to Bar for comparisons (e.g., last month vs. this month)
-                    default_x_col = date_col if date_col else (filtered_df.columns[0] if len(filtered_df.columns) > 0 else None)
+                    # Determine default options for dropdowns based on user query
+                    default_chart_type = "Bar"  # Default for comparisons (e.g., last month vs. this month)
+                    default_x_col = date_col if date_col and any(keyword in question.lower() for keyword in ["date", "time", "month"]) else filtered_df.columns[0]
                     default_y_col = None
-                    default_color = "#00f900"  # Default green color
-                    default_title = "Data Visualization"
+                    default_color = "Single Color"
 
-                    # Prioritize "reviews" or similar numeric column based on query
+                    # Prioritize "reviews" or similar for Y-axis if mentioned in query
                     for col in numeric_cols:
                         if 'review' in col.lower() or any(keyword in col.lower() for keyword in question.lower().split()) or \
                            any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales"]):
                             default_y_col = col
                             break
                     if not default_y_col:
-                        for col in numeric_cols:
-                            if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
-                                default_y_col = col
-                                break
-                        if not default_y_col:
-                            default_y_col = numeric_cols[0]  # Last resort
+                        default_y_col = numeric_cols[0]  # Last resort: use first numeric column
 
-                    # Update defaults based on query intent
-                    if date_col and default_y_col and any(keyword in question.lower() for keyword in ["trend", "over time", "monthly", "daily", "total", "sum", "addition"]):
-                        default_chart_type = "Line"
-                        default_title = f"Total {default_y_col} Trend Over {default_x_col}"
-                    elif date_col and default_y_col and any(keyword in question.lower() for keyword in ["compare", "comparison", "vs", "last month", "this month", "total", "sum", "addition"]):
-                        default_chart_type = "Bar"
-                        default_title = f"Total {default_y_col} Comparison Over {default_x_col}"
-                    elif any(keyword in question.lower() for keyword in ["distribution", "percentage", "proportion"]):
-                        default_chart_type = "Pie"
-                        default_x_col = filtered_df.columns[0]  # Use first column for categories
-                        default_y_col = numeric_cols[0]  # Use first numeric for values
-                        default_title = f"Distribution of Total {default_y_col} by {default_x_col}"
+                    # Visualization options with defaults based on query
+                    st.write("Generate a chart:")
+                    chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], 
+                                            index=["Bar", "Line", "Pie", "Scatter", "Area"].index(default_chart_type))
+                    x_col = st.selectbox("X-axis", filtered_df.columns, 
+                                        index=filtered_df.columns.get_loc(default_x_col) if default_x_col in filtered_df.columns else 0)
+                    
+                    if len(numeric_cols) > 0:
+                        y_col = st.selectbox("Y-axis", numeric_cols, 
+                                            index=numeric_cols.get_loc(default_y_col) if default_y_col in numeric_cols else 0)
+                    
+                        # Color options (default to "Single Color" with green)
+                        color_option = st.selectbox("Color by", ["Single Color"] + filtered_df.columns.tolist(), 
+                                                  index=0)  # Default to "Single Color"
+                        if color_option == "Single Color":
+                            color = st.color_picker("Pick a color", "#00f900")  # Default green color
+                        else:
+                            color = color_option
+
+                        # Chart customization (auto-suggested title based on query)
+                        suggested_title = f"Total {y_col} {'Comparison' if any(keyword in question.lower() for keyword in ['compare', 'comparison', 'vs', 'last month', 'this month']) else 'Trend'} Over {x_col}" if date_col and y_col else "Data Visualization"
+                        chart_title = st.text_input("Chart Title", suggested_title)
+                    
+                        if st.button("Generate Chart"):
+                            fig = go.Figure()
+                            
+                            if chart_type == "Bar":
+                                fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color if color_option == "Single Color" else None))
+                            
+                            elif chart_type == "Line":
+                                fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
+                            
+                            elif chart_type == "Pie":
+                                pie_data = filtered_df.groupby(x_col)[y_col].sum()  # Ensure summing for Pie chart
+                                fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                            
+                            elif chart_type == "Scatter":
+                                fig.add_trace(go.Scatter(
+                                    x=filtered_df[x_col], 
+                                    y=filtered_df[y_col], 
+                                    mode='markers',
+                                    marker=dict(
+                                        color=filtered_df[color] if color_option != "Single Color" else color,
+                                        size=10
+                                    )
+                                ))
+                            
+                            elif chart_type == "Area":
+                                fig.add_trace(go.Scatter(
+                                    x=filtered_df[x_col], 
+                                    y=filtered_df[y_col], 
+                                    fill='tozeroy',
+                                    line=dict(color=color if color_option == "Single Color" else None)
+                                ))
+
+                            # Update layout with labeled axes and dynamic title, reflecting summed totals
+                            fig.update_layout(
+                                title=chart_title,
+                                xaxis_title=x_col,
+                                yaxis_title=f"Total {y_col}",
+                                height=500,
+                                width=700
+                            )
+                            
+                            st.plotly_chart(fig)
                     else:
-                        default_title = f"{default_x_col} vs Total {default_y_col}"
-
-                    # Automatically generate the graph with default options
-                    x_col = default_x_col
-                    y_col = default_y_col
-                    chart_type = default_chart_type
-                    color = default_color
-                    title = default_title
-
-                    if x_col and y_col and x_col in filtered_df.columns and y_col in filtered_df.columns:
-                        fig = go.Figure()
-                        if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color))
-                        
-                        elif chart_type == "Line":
-                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
-                        
-                        elif chart_type == "Pie":
-                            pie_data = filtered_df.groupby(x_col)[y_col].sum()  # Ensure summing for Pie chart
-                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                        
-                        elif chart_type == "Scatter":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                mode='markers',
-                                marker=dict(color=color, size=10)
-                            ))
-                        
-                        elif chart_type == "Area":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                fill='tozeroy',
-                                line=dict(color=color)
-                            ))
-
-                        # Update layout with labeled axes and dynamic title, reflecting summed totals
-                        fig.update_layout(
-                            title=title,
-                            xaxis_title=x_col,
-                            yaxis_title=f"Total {y_col}",
-                            height=500,
-                            width=700
-                        )
-                        
-                        st.plotly_chart(fig)
-                    else:
-                        st.warning("Could not determine suitable columns or chart type for automatic visualization based on user input.")
+                        st.warning("No numeric columns available for charting.")
                 else:
                     st.warning("No numeric columns available for chart generation after attempting conversion.")
             else:
