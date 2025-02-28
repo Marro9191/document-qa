@@ -243,18 +243,18 @@ if menu == "Insight Conversation":
                 else:
                     st.warning("No suitable columns found for automatic visualization. Please manually select fields below.")
 
-                # Optionally, allow manual overrides with selectboxes for user flexibility
+                # Customize the visualization manually, using all options from the original DataFrame (df)
                 st.write("Or customize the visualization manually:")
                 manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(chart_type))
-                manual_x_col = st.selectbox("X-axis", relevant_df.columns, index=relevant_df.columns.get_loc(x_col) if x_col else 0)
-                manual_numeric_cols = relevant_df.select_dtypes(include=['int64', 'float64']).columns
+                manual_x_col = st.selectbox("X-axis", df.columns, index=df.columns.get_loc(x_col) if x_col and x_col in df.columns else 0)
+                manual_numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 manual_y_col = st.selectbox("Y-axis", manual_numeric_cols, index=manual_numeric_cols.get_loc(y_col) if y_col and y_col in manual_numeric_cols else 0)
                 
                 # Add option for trend line in manual customization
                 show_trend_line = st.checkbox("Show Trend Line", value=False, disabled=manual_chart_type != "Scatter")
                 
-                # Color options for manual customization
-                manual_color_option = st.selectbox("Color by", ["Single Color"] + relevant_df.columns.tolist(), index=0 if color_option == "Single Color" else relevant_df.columns.get_loc(color_option) + 1)
+                # Color options for manual customization, using all columns from df
+                manual_color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist(), index=0 if color_option == "Single Color" else (df.columns.get_loc(color_option) + 1 if color_option in df.columns else 0))
                 if manual_color_option == "Single Color":
                     manual_color = st.color_picker("Pick a color", "#00f900")
                 else:
