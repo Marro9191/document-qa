@@ -35,7 +35,7 @@ if menu == "Insight Conversation":
     # Question input
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category?",
+        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category? Or: Please provide me reviews month over month?",
         disabled=not uploaded_file,
     )
 
@@ -66,24 +66,21 @@ if menu == "Insight Conversation":
         st.subheader("Response")
         st.write_stream(stream)
 
-        # Custom analysis for review comparison query
+        # Query 1: Last month vs this month comparison
         if "reviews" in question.lower() and "last month" in question.lower() and "this month" in question.lower():
             current_date = datetime.now()
             current_month = current_date.month
             current_year = current_date.year
             
-            # Adjust for if current month is January
             last_month_year = current_year - 1 if current_month == 1 else current_year
             last_month = 12 if current_month == 1 else current_month - 1
 
-            # Filter data based on category if specified
             category = "Tootbrush" if "tootbrush" in question.lower() else None
             if category:
                 df_filtered = df[df['category'].str.lower() == category.lower()]
             else:
                 df_filtered = df
 
-            # Calculate totals
             this_month_data = df_filtered[
                 (df_filtered['date'].dt.month == current_month) & 
                 (df_filtered['date'].dt.year == current_year)
@@ -96,12 +93,10 @@ if menu == "Insight Conversation":
             this_month_reviews = this_month_data['reviews'].sum()
             last_month_reviews = last_month_data['reviews'].sum()
 
-            # Display results
             st.subheader("Analysis Results")
             st.write(f"Total Reviews This Month: {this_month_reviews}")
             st.write(f"Total Reviews Last Month: {last_month_reviews}")
 
-            # Generate visualization
             st.subheader("Visualization")
             fig = go.Figure(data=[
                 go.Bar(
@@ -117,6 +112,39 @@ if menu == "Insight Conversation":
                 yaxis_title="Number of Reviews",
                 height=500,
                 width=700
+            )
+            
+            st.plotly_chart(fig)
+
+        # Query 2: Month over month reviews
+        elif "reviews" in question.lower() and "month over month" in question.lower():
+            # Group by month and year
+            df['month_year'] = df['date'].dt.to_period('M')
+            monthly_reviews = df.groupby('month_year')['reviews'].sum().reset_index()
+            monthly_reviews['month_year'] = monthly_reviews['month_year'].astype(str)
+
+            st.subheader("Analysis Results")
+            st.write("Monthly Reviews:")
+            st.dataframe(monthly_reviews)
+
+            st.subheader("Visualization")
+            fig = go.Figure(data=[
+                go.Scatter(
+                    x=monthly_reviews['month_year'],
+                    y=monthly_reviews['reviews'],
+                    mode='lines+markers',
+                    line=dict(color='#4ECDC4', width=2),
+                    marker=dict(size=8)
+                )
+            ])
+            
+            fig.update_layout(
+                title="Reviews Trend Month over Month",
+                xaxis_title="Month",
+                yaxis_title="Number of Reviews",
+                height=500,
+                width=700,
+                xaxis=dict(tickangle=45)
             )
             
             st.plotly_chart(fig)
