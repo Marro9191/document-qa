@@ -36,7 +36,7 @@ if menu == "Insight Conversation":
     # Ask the user for a question only after a file is uploaded
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="For example: What were total number of reviews last month compared to this month for toothbrush category? Give me total for each month only.",
+        placeholder="For example: What were total number of reviews last month compared to this month for toothbrush category? Please generate pie chart.",
         disabled=not uploaded_file,
     )
 
@@ -90,7 +90,7 @@ if menu == "Insight Conversation":
             # Try to parse the response and question to filter the DataFrame
             relevant_df = None
             try:
-                # Simple parsing: look for column names or conditions in the question/response
+                # Simple parsing: look for column names or conditions in the query/response
                 question_lower = question.lower()
                 response_lower = response.lower()
                 
@@ -141,7 +141,7 @@ if menu == "Insight Conversation":
             if not relevant_df.empty:
                 st.subheader("Data Visualizations")
                 
-                # Parse the query to infer visualization fields
+                # Parse the query to infer visualization fields and explicit chart type
                 question_lower = question.lower()
                 numeric_cols = relevant_df.select_dtypes(include=['int64', 'float64']).columns
                 categorical_cols = relevant_df.select_dtypes(include=['object', 'category']).columns
@@ -158,24 +158,42 @@ if menu == "Insight Conversation":
                 if numeric_cols.any():
                     y_col = numeric_cols[0]  # Default to first numeric column
 
-                # Automatically select chart type based on query and data
-                chart_types = []  # List to store relevant chart types
+                # Automatically predict chart types based on query (if no explicit chart is specified)
+                predicted_chart_types = []
                 if "trend" in question_lower or "over time" in question_lower:
-                    chart_types.append("Line")
+                    predicted_chart_types.append("Line")
                 if "distribution" in question_lower or "proportion" in question_lower:
-                    chart_types.append("Pie")
+                    predicted_chart_types.append("Pie")
                 if "relationship" in question_lower or "correlation" in question_lower:
-                    chart_types.append("Scatter")
+                    predicted_chart_types.append("Scatter")
                 if "comparison" in question_lower or "total" in question_lower or "count" in question_lower:
-                    chart_types.append("Bar")
+                    predicted_chart_types.append("Bar")
                 if "area" in question_lower or "cumulative" in question_lower:
-                    chart_types.append("Area")
+                    predicted_chart_types.append("Area")
                 if "combo" in question_lower or "combined" in question_lower or ("trend" in question_lower and "comparison" in question_lower):
-                    chart_types.append("Combo")
+                    predicted_chart_types.append("Combo")
 
                 # Default to Bar if no specific chart types are inferred
-                if not chart_types:
-                    chart_types = ["Bar"]
+                if not predicted_chart_types:
+                    predicted_chart_types = ["Bar"]
+
+                # Check for explicit chart type request in the query
+                explicit_chart_type = None
+                chart_type_patterns = {
+                    "pie": "Pie",
+                    "bar": "Bar",
+                    "line": "Line",
+                    "scatter": "Scatter",
+                    "area": "Area",
+                    "combo": "Combo"
+                }
+                for pattern, chart_type in chart_type_patterns.items():
+                    if f"please generate {pattern} chart" in question_lower or f"generate {pattern} chart" in question_lower:
+                        explicit_chart_type = chart_type
+                        break
+
+                # Use explicit chart type if specified, otherwise use predicted chart types
+                chart_types = [explicit_chart_type] if explicit_chart_type else predicted_chart_types
 
                 # Automatically select color (if applicable)
                 color_option = "Single Color"
@@ -195,7 +213,7 @@ if menu == "Insight Conversation":
                 # Create a concise title
                 chart_title = " ".join(keywords) if keywords else f"Visualization for: {question[:30]}..."  # Limit to 30 chars if no keywords
 
-                # Generate charts automatically for each relevant chart type
+                # Generate charts automatically for the selected chart type(s)
                 for chart_type in chart_types:
                     if x_col and y_col:
                         fig = go.Figure()
@@ -262,7 +280,7 @@ if menu == "Insight Conversation":
 
                 # Customize the visualization manually, using all options from the original DataFrame (df)
                 st.write("Or customize the visualization manually:")
-                manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area", "Combo"], index=["Bar", "Line", "Pie", "Scatter", "Area", "Combo"].index(chart_types[0]))
+                manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area", "Combo"], index=["Bar", "Line", "Pie", "Scatter", "Area", "Combo"].index(chart_types[0]) if chart_types else 0)
                 manual_x_col = st.selectbox("X-axis", df.columns, index=df.columns.get_loc(x_col) if x_col and x_col in df.columns else 0)
                 manual_numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 manual_y_col = st.selectbox("Y-axis", manual_numeric_cols, index=manual_numeric_cols.get_loc(y_col) if y_col and y_col in manual_numeric_cols else 0)
