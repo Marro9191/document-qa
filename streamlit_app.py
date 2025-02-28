@@ -66,15 +66,14 @@ if menu == "Insight Conversation":
                 stream=True,
             )
 
-            # Display response
-            st.subheader("Response")
+            # Collect the full response text
             response_text = ""
             for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
                     response_text += chunk.choices[0].delta.content
-            st.write(response_text)
         except Exception as e:
             st.error(f"Error generating response from OpenAI: {e}")
+            response_text = ""
 
         # Query 1: Last month vs this month comparison for Toothbrush category
         if "reviews" in question.lower() and "last month" in question.lower() and "this month" in question.lower():
@@ -85,7 +84,7 @@ if menu == "Insight Conversation":
             last_month_year = current_year - 1 if current_month == 1 else current_year
             last_month = 12 if current_month == 1 else current_month - 1
 
-            category = "Toothbrush"  # Corrected from "Tootbrush" to "Toothbrush"
+            category = "Toothbrush"
             if category:
                 df_filtered = df[df['category'].str.lower() == category.lower()]
             else:
@@ -103,19 +102,26 @@ if menu == "Insight Conversation":
             this_month_reviews = this_month_data['reviews'].sum()
             last_month_reviews = last_month_data['reviews'].sum()
 
-            # Override or validate OpenAI response if it doesn't match the analysis
-            if "60" in response_text and (this_month_reviews != 60 or last_month_reviews != 60):
-                st.warning("The AI response may be incorrect or incomplete. Here’s the accurate analysis:")
-                response_text = (f"Last month, there were {last_month_reviews} reviews in the Toothbrush category. "
-                               f"This month, there are {this_month_reviews} reviews in the Toothbrush category as of the latest data.")
+            # Prepare the correct response based on analysis
+            correct_response = (f"Last month, there were {last_month_reviews} reviews in the Toothbrush category. "
+                              f"This month, there are {this_month_reviews} reviews in the Toothbrush category as of the latest data.")
 
+            # Display the response (use correct response if AI response is incorrect or missing)
             st.subheader("Response")
-            st.write(response_text)
+            if response_text and "0.0" not in response_text and (this_month_reviews != 0.0 or last_month_reviews != 0.0):
+                st.write(response_text)
+                if abs(float(response_text.split()[-1]) - this_month_reviews) > 0.1 or abs(float(response_text.split()[-3]) - last_month_reviews) > 0.1:
+                    st.warning("The AI response may be incorrect or incomplete. Here’s the accurate analysis:")
+                    st.write(correct_response)
+            else:
+                st.write(correct_response)
 
+            # Display analysis results
             st.subheader("Analysis Results")
             st.write(f"Total Reviews This Month: {this_month_reviews}")
             st.write(f"Total Reviews Last Month: {last_month_reviews}")
 
+            # Display visualization
             st.subheader("Visualization")
             fig = go.Figure(data=[
                 go.Bar(
