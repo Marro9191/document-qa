@@ -45,24 +45,40 @@ if menu == "Insight Conversation":
         date_col, numeric_col, category_col = None, None, None
         for col in df.columns:
             if pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col.lower():
-                date_col = col
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                if df[col].notna().sum() > 0:
+                    date_col = col
             if pd.api.types.is_numeric_dtype(df[col]):
                 numeric_col = col
             if df[col].dtype == 'object':
                 category_col = col
 
         if date_col and numeric_col:
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.strftime('%Y-%m')
+            df[date_col] = df[date_col].dt.strftime('%Y-%m')
             filtered_df = df.groupby(date_col)[numeric_col].sum().reset_index()
-            
+
             # Extract Labels and Numbers from Response
             labels = re.findall(r'\b[A-Za-z]+\b', response_text)
-            numbers = [int(n) for n in re.findall(r'\b\d+\b', response_text)]
+            numbers = [int(n) for n in re.findall(r'\b\d+\b', response_text) if n.isdigit()]
             parsed_data = {label: numbers[i] for i, label in enumerate(labels) if i < len(numbers)}
-            
-            # Match Response Data with Uploaded Data
-            matched_data = {row[date_col]: row[numeric_col] for _, row in filtered_df.iterrows() if row[date_col] in parsed_data}
-            
+
+            # Match Response Data with Uploaded Data (Approximate Matching)
+            matched_data = {}
+            for _, row in filtered_df.iterrows():
+                month_str = row[date_col]
+                for label in labels:
+                    try:
+                        label_as_date = pd.to_datetime(label, format='%B', errors='coerce')
+                        if not pd.isna(label_as_date):
+                            label_as_str = label_as_date.strftime('%Y-%m')
+                            if label_as_str == month_str:
+                                matched_data[month_str] = row[numeric_col]
+                    except Exception:
+                        continue
+
+            if not matched_data:
+                matched_data = {row[date_col]: row[numeric_col] for _, row in filtered_df.iterrows()}
+
             # Dynamic Chart Type Selection
             chart_type = "Bar"
             if "trend" in question.lower() or "over time" in question.lower():
