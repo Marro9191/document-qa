@@ -111,7 +111,7 @@ if menu == "Insight Conversation":
                 if numeric_cols.any():
                     # Prioritize "reviews" or related keywords first
                     for col in numeric_cols:
-                        if 'review' in col.lower() or any(keyword in col.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales"]):
+                        if 'review' in col.lower() or any(keyword in col.lower() for keyword in ["number", "count", "total", "value", "reviews"]):
                             numeric_col = col
                             break
                     # If no match for "reviews" or related, fall back to any numeric column implied by query
