@@ -163,35 +163,36 @@ if menu == "Insight Conversation":
             promo_sales['month_year'] = promo_sales['month_year'].astype(str)
             
             # Get unique months and promos
-            months = promo_sales['month_year'].unique()
+            months = sorted(promo_sales['month_year'].unique())
             promos = promo_sales['promo'].unique()
 
             st.subheader("Analysis Results")
             st.write("Sales by Promo for Last Two Months:")
             st.dataframe(promo_sales)
 
-            # Create grouped bar chart
+            # Create line chart with scatter points
             st.subheader("Visualization")
             fig = go.Figure()
             
             colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD']  # Add more colors if needed
             
-            for i, month in enumerate(months):
-                month_data = promo_sales[promo_sales['month_year'] == month]
+            for i, promo in enumerate(promos):
+                promo_data = promo_sales[promo_sales['promo'] == promo]
                 fig.add_trace(
-                    go.Bar(
-                        x=month_data['promo'],
-                        y=month_data['Sales'],
-                        name=month,
-                        marker_color=colors[i % len(colors)]
+                    go.Scatter(
+                        x=promo_data['month_year'],
+                        y=promo_data['Sales'],
+                        mode='lines+markers',
+                        name=str(promo),
+                        line=dict(color=colors[i % len(colors)], width=2),
+                        marker=dict(size=10)
                     )
                 )
 
             fig.update_layout(
                 title="Sales by Promo for Last Two Months",
-                xaxis_title="Promo Code",
+                xaxis_title="Month",
                 yaxis_title="Sales",
-                barmode='group',
                 height=500,
                 width=700,
                 xaxis=dict(tickangle=45)
