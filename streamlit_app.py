@@ -102,13 +102,13 @@ if menu == "Insight Conversation":
                         relevant_columns.append(col)
                     if 'date' in col.lower():
                         date_col = col
-                    # Check for numeric columns more thoroughly
-                    if pd.api.types.is_numeric_dtype(df[col]):
-                        for keyword in keywords:
-                            if keyword in col.lower():
-                                numeric_col = col
-                                break
-                        if numeric_col:
+
+                # Check for numeric columns more thoroughly, matching query keywords
+                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+                if numeric_cols.any():
+                    for col in numeric_cols:
+                        if any(keyword in col.lower() for keyword in keywords):
+                            numeric_col = col
                             break
 
                 # Filter data based on identified columns and date if available
@@ -193,7 +193,7 @@ if menu == "Insight Conversation":
                     if not y_col:
                         y_col = numeric_cols[0]
 
-                    # Determine chart type based on query
+                    # Determine chart type based on query without assuming specific column names
                     if date_col and y_col and any(keyword in question.lower() for keyword in ["trend", "over time", "monthly", "daily"]):
                         chart_type = "Line"  # Time-series data
                         title = f"{y_col} Trend Over {x_col}"
