@@ -102,11 +102,11 @@ if menu == "Insight Conversation":
                         relevant_columns.append(col)
                     if 'date' in col.lower():
                         date_col = col
-                    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-                    if numeric_cols.any():
-                        for num_col in numeric_cols:
-                            if any(keyword in num_col.lower() for keyword in keywords):
-                                numeric_col = num_col
+                    # Check for numeric columns more thoroughly
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        for keyword in keywords:
+                            if keyword in col.lower():
+                                numeric_col = col
                                 break
                         if numeric_col:
                             break
@@ -146,8 +146,17 @@ if menu == "Insight Conversation":
 
             # Dynamically generate the most relevant graph based on the query
             if not filtered_df.empty:
+                # Check for numeric columns more thoroughly
                 numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
+                if numeric_cols.empty:
+                    # Try to convert columns that might be numeric but stored as strings
+                    for col in filtered_df.columns:
+                        if filtered_df[col].dtype == 'object' and filtered_df[col].str.match(r'^-?\d*\.?\d+$').all():
+                            filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
+                    numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
+
                 if len(numeric_cols) > 0:
+                    st.write("Debug: Numeric columns found:", numeric_cols.tolist())  # Debugging output
                     # Determine the most relevant chart type and data based on the query
                     x_col = None
                     y_col = None
@@ -242,6 +251,6 @@ if menu == "Insight Conversation":
                     else:
                         st.warning("Could not determine suitable columns or chart type for visualization.")
                 else:
-                    st.warning("No numeric columns available for chart generation.")
+                    st.warning("No numeric columns available for chart generation after attempting conversion.")
             else:
                 st.warning("No data available for visualization.")
