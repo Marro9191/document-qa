@@ -2,63 +2,52 @@ import streamlit as st
 from openai import OpenAI
 import pandas as pd
 import plotly.graph_objects as go
+from datetime import datetime
 
 # Add sidebar with menu item
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio("Menu", ["Insight Conversation"])
 
-# Show title and description (main area)
+# Show title and description
 if menu == "Insight Conversation":
     st.title("📄 Comcore Prototype v1")
     st.write(
         "Upload CSV file below and ask analytical questions. "
-        "Supported formats: .txt, .md, .csv, .xlsx., "
+        "Supported formats: .csv, "
         "and you can also visualize the data with customizable charts. "
-        "Please note it has to be UTF 8 encoded. "
+        "Please note it has to be UTF-8 encoded."
     )
 
-    # Get OpenAI API key from Streamlit secrets (no UI input required)
+    # Get OpenAI API key from Streamlit secrets
     try:
         openai_api_key = st.secrets["openai"]["api_key"]
         client = OpenAI(api_key=openai_api_key)
     except KeyError:
-        st.error("Please add your OpenAI API key to `.streamlit/secrets.toml` under the key `openai.api_key`. See https://docs.streamlit.io/develop/concepts/connections/secrets-management for instructions.")
+        st.error("Please add your OpenAI API key to `.streamlit/secrets.toml` under the key `openai.api_key`.")
         st.stop()
 
-    # Let the user upload a file first (no API key prompt in UI)
+    # File uploader
     uploaded_file = st.file_uploader(
-        "Upload a document (.txt, .md, .csv, .xlsx)",
-        type=("txt", "md", "csv", "xlsx")
+        "Upload a document (.csv)",
+        type="csv"
     )
 
-    # Ask the user for a question only after a file is uploaded
+    # Question input
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="For example: What were total number of reviews last month compared to this month for tootbrush category? Give me total for each month only.",
+        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category?",
         disabled=not uploaded_file,
     )
 
     if uploaded_file and question:
-        # Process the uploaded file based on its type
-        file_extension = uploaded_file.name.split('.')[-1].lower()
-        df = None  # DataFrame for Excel/CSV
-        
-        if file_extension in ['txt', 'md']:
-            document = uploaded_file.read().decode()
-        
-        elif file_extension == 'csv':
-            df = pd.read_csv(uploaded_file)
-            document = df.to_string()
-        
-        elif file_extension == 'xlsx':
-            df = pd.read_excel(uploaded_file)
-            document = df.to_string()
-        
-        else:
-            st.error("Unsupported file format")
-            st.stop()
+        # Process CSV file
+        df = pd.read_csv(uploaded_file)
+        document = df.to_string()
 
-        # Create the message with the document content and question
+        # Convert date column to datetime
+        df['date'] = pd.to_datetime(df['date'], format='%d/%m/%Y')
+
+        # Create message for OpenAI
         messages = [
             {
                 "role": "user",
@@ -66,88 +55,125 @@ if menu == "Insight Conversation":
             }
         ]
 
-        # Generate an answer using the OpenAI API
+        # Generate answer using OpenAI
         stream = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             stream=True,
         )
 
-        # Display the response
+        # Display response
         st.subheader("Response")
         st.write_stream(stream)
 
-        # If it's a data file (CSV/Excel), offer visualization options
-        if df is not None:
-            st.subheader("Data Visualizations")
+        # Custom analysis for review comparison query
+        if "reviews" in question.lower() and "last month" in question.lower() and "this month" in question.lower():
+            current_date = datetime.now()
+            current_month = current_date.month
+            current_year = current_date.year
             
-            # Display the table
-            st.write("Data Table:")
-            st.dataframe(df)
+            # Adjust for if current month is January
+            last_month_year = current_year - 1 if current_month == 1 else current_year
+            last_month = 12 if current_month == 1 else current_month - 1
 
-            # Visualization options
-            if not df.empty:
-                st.write("Generate a chart:")
-                chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"])
-                x_col = st.selectbox("X-axis", df.columns)
-                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-                
-                if len(numeric_cols) > 0:
-                    y_col = st.selectbox("Y-axis", numeric_cols)
-                    
-                    # Color options
-                    color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
-                    if color_option == "Single Color":
-                        color = st.color_picker("Pick a color", "#00f900")
-                    else:
-                        color = color_option
-
-                    # Chart customization
-                    chart_title = st.text_input("Chart Title", "Data Visualization")
-                    
-                    if st.button("Generate Chart"):
-                        fig = go.Figure()
-                        
-                        if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=df[x_col], y=df[y_col], marker_color=color if color_option == "Single Color" else None))
-                        
-                        elif chart_type == "Line":
-                            fig.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
-                        
-                        elif chart_type == "Pie":
-                            pie_data = df.groupby(x_col)[y_col].sum()
-                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                        
-                        elif chart_type == "Scatter":
-                            fig.add_trace(go.Scatter(
-                                x=df[x_col], 
-                                y=df[y_col], 
-                                mode='markers',
-                                marker=dict(
-                                    color=df[color] if color_option != "Single Color" else color,
-                                    size=10
-                                )
-                            ))
-                        
-                        elif chart_type == "Area":
-                            fig.add_trace(go.Scatter(
-                                x=df[x_col], 
-                                y=df[y_col], 
-                                fill='tozeroy',
-                                line=dict(color=color if color_option == "Single Color" else None)
-                            ))
-
-                        # Update layout
-                        fig.update_layout(
-                            title=chart_title,
-                            xaxis_title=x_col,
-                            yaxis_title=y_col,
-                            height=500,
-                            width=700
-                        )
-                        
-                        st.plotly_chart(fig)
-                else:
-                    st.warning("No numeric columns available for charting.")
+            # Filter data based on category if specified
+            category = "Tootbrush" if "tootbrush" in question.lower() else None
+            if category:
+                df_filtered = df[df['category'].str.lower() == category.lower()]
             else:
-                st.warning("The uploaded data is empty.")
+                df_filtered = df
+
+            # Calculate totals
+            this_month_data = df_filtered[
+                (df_filtered['date'].dt.month == current_month) & 
+                (df_filtered['date'].dt.year == current_year)
+            ]
+            last_month_data = df_filtered[
+                (df_filtered['date'].dt.month == last_month) & 
+                (df_filtered['date'].dt.year == last_month_year)
+            ]
+
+            this_month_reviews = this_month_data['reviews'].sum()
+            last_month_reviews = last_month_data['reviews'].sum()
+
+            # Display results
+            st.subheader("Analysis Results")
+            st.write(f"Total Reviews This Month: {this_month_reviews}")
+            st.write(f"Total Reviews Last Month: {last_month_reviews}")
+
+            # Generate visualization
+            st.subheader("Visualization")
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=['Last Month', 'This Month'],
+                    y=[last_month_reviews, this_month_reviews],
+                    marker_color=['#FF6B6B', '#4ECDC4']
+                )
+            ])
+            
+            fig.update_layout(
+                title=f"Reviews Comparison - {category if category else 'All Categories'}",
+                xaxis_title="Period",
+                yaxis_title="Number of Reviews",
+                height=500,
+                width=700
+            )
+            
+            st.plotly_chart(fig)
+
+        # General visualization options
+        st.subheader("Custom Visualization")
+        if not df.empty:
+            chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"])
+            x_col = st.selectbox("X-axis", df.columns)
+            numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+            
+            if len(numeric_cols) > 0:
+                y_col = st.selectbox("Y-axis", numeric_cols)
+                
+                color_option = st.selectbox("Color by", ["Single Color"] + df.columns.tolist())
+                if color_option == "Single Color":
+                    color = st.color_picker("Pick a color", "#00f900")
+                else:
+                    color = color_option
+
+                chart_title = st.text_input("Chart Title", "Data Visualization")
+                
+                if st.button("Generate Chart"):
+                    fig = go.Figure()
+                    
+                    if chart_type == "Bar":
+                        fig.add_trace(go.Bar(x=df[x_col], y=df[y_col], marker_color=color if color_option == "Single Color" else None))
+                    elif chart_type == "Line":
+                        fig.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
+                    elif chart_type == "Pie":
+                        pie_data = df.groupby(x_col)[y_col].sum()
+                        fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                    elif chart_type == "Scatter":
+                        fig.add_trace(go.Scatter(
+                            x=df[x_col], 
+                            y=df[y_col], 
+                            mode='markers',
+                            marker=dict(color=df[color] if color_option != "Single Color" else color, size=10)
+                        ))
+                    elif chart_type == "Area":
+                        fig.add_trace(go.Scatter(
+                            x=df[x_col], 
+                            y=df[y_col], 
+                            fill='tozeroy',
+                            line=dict(color=color if color_option == "Single Color" else None)
+                        ))
+
+                    fig.update_layout(
+                        title=chart_title,
+                        xaxis_title=x_col,
+                        yaxis_title=y_col,
+                        height=500,
+                        width=700
+                    )
+                    
+                    st.plotly_chart(fig)
+            else:
+                st.warning("No numeric columns available for charting.")
+        else:
+            st.warning("The uploaded data is empty.")
