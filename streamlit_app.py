@@ -103,18 +103,19 @@ if menu == "Insight Conversation":
                     if 'date' in col.lower() or 'time' in col.lower():
                         date_col = col
 
-                # Identify numeric columns based on query keywords
+                # Identify numeric columns based on query keywords, prioritizing "reviews" or similar
                 numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 if numeric_cols.any():
+                    # Prioritize "reviews" or related keywords first
                     for col in numeric_cols:
-                        if any(keyword in col.lower() for keyword in keywords) or \
-                           any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
+                        if 'review' in col.lower() or any(keyword in col.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales"]):
                             numeric_col = col
                             break
-                    # If no specific numeric column is found, fall back to any numeric column implied by query
+                    # If no match for "reviews" or related, fall back to any numeric column implied by query
                     if not numeric_col:
                         for col in numeric_cols:
-                            if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
+                            if any(keyword in col.lower() for keyword in keywords) or \
+                               any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
                                 numeric_col = col
                                 break
 
@@ -177,13 +178,13 @@ if menu == "Insight Conversation":
                     date_cols = [col for col in filtered_df.columns if 'date' in col.lower() or 'time' in col.lower()]
                     date_col = date_cols[0] if date_cols else None
 
-                    # Find numeric columns mentioned or implied in the query
+                    # Find numeric columns mentioned or implied in the query, prioritizing "reviews" or similar
                     for col in numeric_cols:
-                        if any(keyword in col.lower() for keyword in question.lower().split()) or \
-                           any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
+                        if 'review' in col.lower() or any(keyword in col.lower() for keyword in question.lower().split()) or \
+                           any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales"]):
                             y_col = col
                             break
-                    # If no specific numeric column is found, fall back to any numeric column implied by query
+                    # If no match for "reviews" or related, fall back to any numeric column implied by query
                     if not y_col:
                         for col in numeric_cols:
                             if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
