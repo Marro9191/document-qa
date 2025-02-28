@@ -50,11 +50,25 @@ if menu == "Insight Conversation":
             document = uploaded_file.read().decode()
         
         elif file_extension == 'csv':
-            df = pd.read_csv(uploaded_file, parse_dates=['date'], date_format='%d/%m/%Y')
+            try:
+                df = pd.read_csv(uploaded_file, parse_dates=['date'], dayfirst=True)
+                # Ensure date is in DD/MM/YYYY format after reading
+                if 'date' in df.columns:
+                    df['date'] = pd.to_datetime(df['date'], errors='coerce', format='%d/%m/%Y')
+            except Exception as e:
+                st.error(f"Error reading CSV file: {e}")
+                st.stop()
             document = df.to_string()
         
         elif file_extension == 'xlsx':
-            df = pd.read_excel(uploaded_file, parse_dates=['date'], date_format='%d/%m/%Y')
+            try:
+                df = pd.read_excel(uploaded_file, parse_dates=['date'], dayfirst=True)
+                # Ensure date is in DD/MM/YYYY format after reading
+                if 'date' in df.columns:
+                    df['date'] = pd.to_datetime(df['date'], errors='coerce', format='%d/%m/%Y')
+            except Exception as e:
+                st.error(f"Error reading Excel file: {e}")
+                st.stop()
             document = df.to_string()
         
         else:
@@ -105,7 +119,10 @@ if menu == "Insight Conversation":
                     # Ensure 'date' or 'month' column exists and is properly formatted in DD/MM/YYYY
                     if "date" in df.columns:
                         # Ensure date is in DD/MM/YYYY format
-                        df['date'] = pd.to_datetime(df['date'], errors='coerce', format='%d/%m/%Y')
+                        if pd.api.types.is_datetime64_any_dtype(df['date']):
+                            relevant_df['date'] = pd.to_datetime(relevant_df['date'], errors='coerce', format='%d/%m/%Y')
+                        else:
+                            relevant_df['date'] = pd.to_datetime(relevant_df['date'], errors='coerce', format='%d/%m/%Y', dayfirst=True)
                         # Filter for toothbrush category if it exists
                         if "category" in df.columns:
                             relevant_df = relevant_df[relevant_df['category'].str.contains("toothbrush", case=False, na=False)]
