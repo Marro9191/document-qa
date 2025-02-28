@@ -11,9 +11,9 @@ menu = st.sidebar.radio("Menu", ["Insight Conversation"])
 if menu == "Insight Conversation":
     st.title("📄 Comcore Prototype v1")
     st.write(
-        "Upload CSV file below and ask analytical questions "
-        "Supported formats: .txt, .md, .csv, .xlsx. For Excel/CSV files, "
-        "you can also visualize the data with customizable charts. "
+        "Upload CSV file below and ask analytical questions. "
+        "Supported formats: .txt, .md, .csv, .xlsx., "
+        "and you can also visualize the data with customizable charts. "
         "Please note it has to be UTF 8 encoded. "
     )
 
