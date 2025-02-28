@@ -2,167 +2,85 @@ import streamlit as st
 from openai import OpenAI
 import pandas as pd
 import plotly.graph_objects as go
+import re
+import datetime
 
-# Add sidebar with menu item
+# Sidebar Navigation
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio("Menu", ["Insight Conversation"])
 
-# Show title and description (main area)
 if menu == "Insight Conversation":
-    st.title("📄 Comcore Prototype v1")
-    st.write(
-        "Upload CSV file below and ask analytical questions. "
-        "Supported formats: .txt, .md, .csv, .xlsx. "
-        "You can also visualize the data with customizable charts. "
-        "Please note it has to be UTF-8 encoded. "
-    )
+    st.title("📄 Comcore Prototype v2")
+    st.write("Upload a CSV or Excel file and ask analytical questions. The system will automatically generate insights and visualizations.")
 
-    # Get OpenAI API key from Streamlit secrets (no UI input required)
+    # OpenAI API Key Setup
     try:
         openai_api_key = st.secrets["openai"]["api_key"]
         client = OpenAI(api_key=openai_api_key)
     except KeyError:
-        st.error("Please add your OpenAI API key to `.streamlit/secrets.toml` under the key `openai.api_key`. See https://docs.streamlit.io/develop/concepts/connections/secrets-management for instructions.")
+        st.error("Please add your OpenAI API key in Streamlit secrets.")
         st.stop()
 
-    # Let the user upload a file first (no API key prompt in UI)
-    uploaded_file = st.file_uploader(
-        "Upload a document (.txt, .md, .csv, .xlsx)",
-        type=("txt", "md", "csv", "xlsx")
-    )
+    # File Uploader
+    uploaded_file = st.file_uploader("Upload CSV or Excel File", type=("csv", "xlsx"))
 
-    # Ask the user for a question only after a file is uploaded
-    question = st.text_area(
-        "Now ask a question about the document!",
-        placeholder="For example: What were total number of reviews last month compared to this month for toothbrush category? Give me total for each month only.",
-        disabled=not uploaded_file,
-    )
+    # User Question Input
+    question = st.text_area("Ask a question about the data:", disabled=not uploaded_file)
 
     if uploaded_file and question:
-        # Process the uploaded file based on its type
         file_extension = uploaded_file.name.split('.')[-1].lower()
-        df = None  # DataFrame for Excel/CSV
-        
-        if file_extension in ['txt', 'md']:
-            document = uploaded_file.read().decode()
-        
-        elif file_extension == 'csv':
-            df = pd.read_csv(uploaded_file, encoding='utf-8')
-            document = df.to_string()
-        
-        elif file_extension == 'xlsx':
-            df = pd.read_excel(uploaded_file)
-            document = df.to_string()
-        
-        else:
-            st.error("Unsupported file format")
-            st.stop()
+        df = pd.read_csv(uploaded_file) if file_extension == 'csv' else pd.read_excel(uploaded_file)
+        document = df.to_string()
 
-        # Create the message with the document content and question
-        messages = [
-            {
-                "role": "user",
-                "content": f"Here's a document: {document} \n\n---\n\n {question}",
-            }
-        ]
+        # OpenAI Query
+        messages = [{"role": "user", "content": f"Here's a document: {document}\n\n---\n\n {question}"}]
+        stream = client.chat.completions.create(model="gpt-4", messages=messages, stream=True)
+        response_text = "".join(chunk.choices[0].delta.content for chunk in stream if chunk.choices[0].delta.content)
 
-        # Generate an answer using the OpenAI API
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            stream=True,
-        )
-
-        # Display the response
+        # Display Response
         st.subheader("Response")
-        st.write_stream(stream)
+        st.write(response_text)
 
-        # If it's a data file (CSV/Excel), offer visualization options
-        if df is not None:
-            st.subheader("Data Visualizations")
+        # Automatic Column Detection
+        date_col, numeric_col, category_col = None, None, None
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col.lower():
+                date_col = col
+            if pd.api.types.is_numeric_dtype(df[col]):
+                numeric_col = col
+            if df[col].dtype == 'object':
+                category_col = col
+
+        if date_col and numeric_col:
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.strftime('%Y-%m')
+            filtered_df = df.groupby(date_col)[numeric_col].sum().reset_index()
             
-            # Filter data table based on user query (e.g., Toothbrush, reviews, date)
-            filtered_df = df.copy()
-            if "toothbrush" in question.lower() and "reviews" in question.lower():
-                filtered_df = df[df['Category'].str.lower() == 'toothbrush'] if 'Category' in df.columns else df
-                if 'Date' in df.columns:
-                    filtered_df['Date'] = pd.to_datetime(filtered_df['Date']).dt.strftime('%Y-%m')
-                    filtered_df = filtered_df.groupby('Date')['Reviews'].sum().reset_index()
+            # Extract Labels and Numbers from Response
+            labels = re.findall(r'\b[A-Za-z]+\b', response_text)
+            numbers = [int(n) for n in re.findall(r'\b\d+\b', response_text)]
+            parsed_data = {label: numbers[i] for i, label in enumerate(labels) if i < len(numbers)}
             
-            # Display the relevant data table
-            st.write("Relevant Data Table (including dates):")
-            st.dataframe(filtered_df)
+            # Match Response Data with Uploaded Data
+            matched_data = {row[date_col]: row[numeric_col] for _, row in filtered_df.iterrows() if row[date_col] in parsed_data}
+            
+            # Dynamic Chart Type Selection
+            chart_type = "Bar"
+            if "trend" in question.lower() or "over time" in question.lower():
+                chart_type = "Line"
+            elif "distribution" in question.lower():
+                chart_type = "Pie"
 
-            # Visualization options (auto-select defaults but keep all options)
-            if not filtered_df.empty:
-                st.write("Generate a chart:")
-                # Auto-select defaults
-                default_chart_type = "Bar"
-                default_x_col = 'Date' if 'Date' in filtered_df.columns else filtered_df.columns[0]
-                numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
-                default_y_col = 'Reviews' if 'Reviews' in numeric_cols else (numeric_cols[0] if len(numeric_cols) > 0 else None)
-                default_color = "Single Color"
+            # Generate Chart
+            fig = go.Figure()
+            if chart_type == "Bar":
+                fig.add_trace(go.Bar(x=list(matched_data.keys()), y=list(matched_data.values()), marker_color="#00f900"))
+            elif chart_type == "Line":
+                fig.add_trace(go.Scatter(x=list(matched_data.keys()), y=list(matched_data.values()), mode='lines', line=dict(color="#00f900")))
+            elif chart_type == "Pie":
+                fig.add_trace(go.Pie(labels=list(matched_data.keys()), values=list(matched_data.values())))
 
-                chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(default_chart_type))
-                x_col = st.selectbox("X-axis", filtered_df.columns, index=filtered_df.columns.get_loc(default_x_col) if default_x_col in filtered_df.columns else 0)
-                
-                if len(numeric_cols) > 0:
-                    y_col = st.selectbox("Y-axis", numeric_cols, index=numeric_cols.get_loc(default_y_col) if default_y_col in numeric_cols else 0)
-                    
-                    # Color options (auto-select "Single Color")
-                    color_option = st.selectbox("Color by", ["Single Color"] + filtered_df.columns.tolist(), index=0)
-                    if color_option == "Single Color":
-                        color = st.color_picker("Pick a color", "#00f900")
-                    else:
-                        color = color_option
-
-                    # Chart customization (auto-suggested title)
-                    suggested_title = f"{x_col} vs {y_col}" if 'Date' in filtered_df.columns and y_col == 'Reviews' else "Data Visualization"
-                    chart_title = st.text_input("Chart Title", suggested_title)
-                    
-                    if st.button("Generate Chart"):
-                        fig = go.Figure()
-                        
-                        if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color if color_option == "Single Color" else None))
-                        
-                        elif chart_type == "Line":
-                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color if color_option == "Single Color" else None)))
-                        
-                        elif chart_type == "Pie":
-                            pie_data = filtered_df.groupby(x_col)[y_col].sum()
-                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                        
-                        elif chart_type == "Scatter":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                mode='markers',
-                                marker=dict(
-                                    color=filtered_df[color] if color_option != "Single Color" else color,
-                                    size=10
-                                )
-                            ))
-                        
-                        elif chart_type == "Area":
-                            fig.add_trace(go.Scatter(
-                                x=filtered_df[x_col], 
-                                y=filtered_df[y_col], 
-                                fill='tozeroy',
-                                line=dict(color=color if color_option == "Single Color" else None)
-                            ))
-
-                        # Update layout with labeled axes
-                        fig.update_layout(
-                            title=chart_title,
-                            xaxis_title=x_col,
-                            yaxis_title=y_col,
-                            height=500,
-                            width=700
-                        )
-                        
-                        st.plotly_chart(fig)
-                else:
-                    st.warning("No numeric columns available for charting.")
-            else:
-                st.warning("The filtered data is empty.")
+            # Display Chart
+            fig.update_layout(title=f"{numeric_col.capitalize()} Trends", height=500, width=700)
+            st.plotly_chart(fig)
+        else:
+            st.warning("No suitable data available for visualization.")
