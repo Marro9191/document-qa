@@ -95,13 +95,16 @@ if menu == "Insight Conversation":
                 relevant_columns = []
                 date_col = None
                 numeric_col = None
+                category_col = None
 
-                # Identify relevant columns (date, numeric, and others) based on query
+                # Identify relevant columns (date, numeric, category, and others) based on query
                 for col in df.columns:
                     if any(keyword in col.lower() for keyword in keywords):
                         relevant_columns.append(col)
                     if 'date' in col.lower() or 'time' in col.lower():
                         date_col = col
+                    if 'category' in col.lower():
+                        category_col = col
 
                 # Identify numeric columns based on query keywords, prioritizing "reviews" or similar
                 numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
@@ -119,25 +122,32 @@ if menu == "Insight Conversation":
                                 numeric_col = col
                                 break
 
+                # Filter for Toothbrush category if mentioned in query
+                if 'toothbrush' in question.lower() and category_col and category_col in df.columns:
+                    filtered_df = df[df[category_col].str.lower() == 'toothbrush']
+                else:
+                    filtered_df = df.copy()
+
                 # Filter data based on identified columns and date if available
                 if relevant_columns or date_col or numeric_col:
                     columns_to_include = []
-                    if date_col and date_col in df.columns and not df[date_col].isnull().all():
+                    if date_col and date_col in filtered_df.columns and not filtered_df[date_col].isnull().all():
                         try:
                             columns_to_include.append(date_col)
-                            filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
-                            # Try to convert date column to datetime with DD/MM/YY format
+                            filtered_df = filtered_df[[col for col in [date_col] + relevant_columns if col in filtered_df.columns]]
+                            # Try to convert date column to datetime with error handling (assuming DD/MM/YY format)
                             filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], format='%d/%m/%y', errors='coerce').dt.strftime('%Y-%m')
                         except (ValueError, TypeError) as e:
                             st.warning(f"Could not parse date column '{date_col}' due to: {e}. Using original format.")
-                            filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
+                            filtered_df = filtered_df[[col for col in [date_col] + relevant_columns if col in filtered_df.columns]]
                     else:
-                        filtered_df = df[relevant_columns] if relevant_columns else df
+                        filtered_df = filtered_df[relevant_columns] if relevant_columns else filtered_df
 
-                    # If numeric column is identified, aggregate or filter further
+                    # If numeric column is identified, aggregate or filter further by month
                     if numeric_col and date_col:
                         if not filtered_df[date_col].isnull().all() and numeric_col in filtered_df.columns:
                             try:
+                                # Group by month and sum the numeric column (e.g., Reviews)
                                 filtered_df = filtered_df.groupby(date_col)[numeric_col].sum().reset_index()
                             except KeyError as e:
                                 st.warning(f"Error grouping by date and numeric column: {e}")
@@ -212,9 +222,9 @@ if menu == "Insight Conversation":
                     if date_col and y_col and any(keyword in question.lower() for keyword in ["trend", "over time", "monthly", "daily"]):
                         chart_type = "Line"  # Time-series data
                         title = f"{y_col} Trend Over {x_col}"
-                    elif date_col and y_col and any(keyword in question.lower() for keyword in ["compare", "comparison", "vs"]):
-                        chart_type = "Bar"  # Comparison over time (matching your example)
-                        title = f"{y_col} vs {x_col}"
+                    elif date_col and y_col and any(keyword in question.lower() for keyword in ["compare", "comparison", "vs", "last month", "this month"]):
+                        chart_type = "Bar"  # Comparison over time (e.g., last month vs. this month)
+                        title = f"{y_col} Comparison Over {x_col}"
                     elif any(keyword in question.lower() for keyword in ["distribution", "percentage", "proportion"]):
                         chart_type = "Pie"  # Categorical or percentage data
                         x_col = filtered_df.columns[0]  # Use first column for categories
