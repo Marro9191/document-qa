@@ -126,8 +126,8 @@ if menu == "Insight Conversation":
                         try:
                             columns_to_include.append(date_col)
                             filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
-                            # Try to convert date column to datetime with error handling
-                            filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], errors='coerce').dt.strftime('%Y-%m')
+                            # Try to convert date column to datetime with DD/MM/YY format
+                            filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], format='%d/%m/%y', errors='coerce').dt.strftime('%Y-%m')
                         except (ValueError, TypeError) as e:
                             st.warning(f"Could not parse date column '{date_col}' due to: {e}. Using original format.")
                             filtered_df = df[[col for col in [date_col] + relevant_columns if col in df.columns]]
@@ -197,7 +197,7 @@ if menu == "Insight Conversation":
                     if date_col:
                         if not filtered_df[date_col].isnull().all():
                             try:
-                                filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], errors='coerce').dt.strftime('%Y-%m')
+                                filtered_df[date_col] = pd.to_datetime(filtered_df[date_col], format='%d/%m/%y', errors='coerce').dt.strftime('%Y-%m')
                                 x_col = date_col
                             except (ValueError, TypeError) as e:
                                 st.warning(f"Could not format date column '{date_col}' for chart: {e}. Using original format.")
@@ -213,7 +213,7 @@ if menu == "Insight Conversation":
                         chart_type = "Line"  # Time-series data
                         title = f"{y_col} Trend Over {x_col}"
                     elif date_col and y_col and any(keyword in question.lower() for keyword in ["compare", "comparison", "vs"]):
-                        chart_type = "Bar"  # Comparison over time
+                        chart_type = "Bar"  # Comparison over time (matching your example)
                         title = f"{y_col} vs {x_col}"
                     elif any(keyword in question.lower() for keyword in ["distribution", "percentage", "proportion"]):
                         chart_type = "Pie"  # Categorical or percentage data
