@@ -204,4 +204,44 @@ if menu == "Insight Conversation":
                     if chart_type and x_col and y_col and x_col in filtered_df.columns and y_col in filtered_df.columns:
                         fig = go.Figure()
                         if chart_type == "Bar":
-                            fig.add_trace(go.Bar(x=filtered_df[x_col],
+                            fig.add_trace(go.Bar(x=filtered_df[x_col], y=filtered_df[y_col], marker_color=color))
+                        
+                        elif chart_type == "Line":
+                            fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
+                        
+                        elif chart_type == "Pie":
+                            pie_data = filtered_df.groupby(x_col)[y_col].sum()
+                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                        
+                        elif chart_type == "Scatter":
+                            fig.add_trace(go.Scatter(
+                                x=filtered_df[x_col], 
+                                y=filtered_df[y_col], 
+                                mode='markers',
+                                marker=dict(color=color, size=10)
+                            ))
+                        
+                        elif chart_type == "Area":
+                            fig.add_trace(go.Scatter(
+                                x=filtered_df[x_col], 
+                                y=filtered_df[y_col], 
+                                fill='tozeroy',
+                                line=dict(color=color)
+                            ))
+
+                        # Update layout with labeled axes and dynamic title
+                        fig.update_layout(
+                            title=title,
+                            xaxis_title=x_col,
+                            yaxis_title=y_col,
+                            height=500,
+                            width=700
+                        )
+                        
+                        st.plotly_chart(fig)
+                    else:
+                        st.warning("Could not determine suitable columns or chart type for visualization.")
+                else:
+                    st.warning("No numeric columns available for chart generation.")
+            else:
+                st.warning("No data available for visualization.")
