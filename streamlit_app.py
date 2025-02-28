@@ -34,7 +34,7 @@ if menu == "Insight Conversation":
     # Question input
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="Examples: What were total number of reviews last month compared to this month for tootbrush category?",
+        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category?",
         disabled=not uploaded_file,
     )
 
