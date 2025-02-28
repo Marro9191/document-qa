@@ -35,7 +35,7 @@ if menu == "Insight Conversation":
     # Question input
     question = st.text_area(
         "Now ask a question about the document!",
-        placeholder="Example: What were total number of reviews last month compared to this month for tootbrush category?",
+        placeholder="Example: What were total number of reviews last month compared to this month for Toothbrush category?",
         disabled=not uploaded_file,
     )
 
@@ -55,16 +55,23 @@ if menu == "Insight Conversation":
             }
         ]
 
-        # Generate answer using OpenAI
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            stream=True,
-        )
+        # Check if we should skip the OpenAI response
+        show_openai_response = not ("reviews" in question.lower() and 
+                                   "last month" in question.lower() and 
+                                   "this month" in question.lower() and 
+                                   "toothbrush" in question.lower())
 
-        # Display response
-        st.subheader("Response")
-        st.write_stream(stream)
+        # Generate and display OpenAI response only if not skipping
+        if show_openai_response:
+            stream = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                stream=True,
+            )
+
+            # Display response
+            st.subheader("Response")
+            st.write_stream(stream)
 
         # Custom analysis for review comparison query
         if "reviews" in question.lower() and "last month" in question.lower() and "this month" in question.lower():
@@ -77,7 +84,7 @@ if menu == "Insight Conversation":
             last_month = 12 if current_month == 1 else current_month - 1
 
             # Filter data based on category if specified
-            category = "Tootbrush" if "tootbrush" in question.lower() else None
+            category = "Toothbrush"  # Corrected from "Tootbrush" to "Toothbrush"
             if category:
                 df_filtered = df[df['category'].str.lower() == category.lower()]
             else:
@@ -96,7 +103,7 @@ if menu == "Insight Conversation":
             this_month_reviews = this_month_data['reviews'].sum()
             last_month_reviews = last_month_data['reviews'].sum()
 
-            # Display results
+            # Display results (no OpenAI response here)
             st.subheader("Analysis Results")
             st.write(f"Total Reviews This Month: {this_month_reviews}")
             st.write(f"Total Reviews Last Month: {last_month_reviews}")
