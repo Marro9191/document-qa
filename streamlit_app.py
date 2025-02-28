@@ -50,11 +50,11 @@ if menu == "Insight Conversation":
             document = uploaded_file.read().decode()
         
         elif file_extension == 'csv':
-            df = pd.read_csv(uploaded_file)
+            df = pd.read_csv(uploaded_file, parse_dates=['date'], date_format='%d/%m/%Y')
             document = df.to_string()
         
         elif file_extension == 'xlsx':
-            df = pd.read_excel(uploaded_file)
+            df = pd.read_excel(uploaded_file, parse_dates=['date'], date_format='%d/%m/%Y')
             document = df.to_string()
         
         else:
@@ -102,42 +102,49 @@ if menu == "Insight Conversation":
                     # Start with a basic filter based on the question
                     relevant_df = df[potential_cols].copy()
                     
-                    # Ensure 'date' or 'month' column exists and is properly formatted
+                    # Ensure 'date' or 'month' column exists and is properly formatted in DD/MM/YYYY
                     if "date" in df.columns:
-                        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                        # Ensure date is in DD/MM/YYYY format
+                        df['date'] = pd.to_datetime(df['date'], errors='coerce', format='%d/%m/%Y')
                         # Filter for toothbrush category if it exists
                         if "category" in df.columns:
                             relevant_df = relevant_df[relevant_df['category'].str.contains("toothbrush", case=False, na=False)]
-                        # Get the last two months (e.g., January and February 2025, given current date is February 28, 2025)
-                        current_date = datetime(2025, 2, 28)  # Current date as specified
-                        last_month = current_date - timedelta(days=30)
-                        this_month = current_date
+                        # Get the last two months dynamically using current date
+                        current_date = datetime.now()  # Dynamic current date
+                        last_month = current_date.replace(day=1) - timedelta(days=1)
+                        last_month = last_month.replace(day=1)
+                        this_month = current_date.replace(day=1)
+                        # Format dates as DD/MM/YYYY
+                        last_month_str = last_month.strftime('%d/%m/%Y')
+                        this_month_str = this_month.strftime('%d/%m/%Y')
                         relevant_df = relevant_df[
-                            (relevant_df['date'].dt.month == this_month.month) | 
-                            (relevant_df['date'].dt.month == last_month.month)
+                            (relevant_df['date'].dt.strftime('%d/%m/%Y') == last_month_str) | 
+                            (relevant_df['date'].dt.strftime('%d/%m/%Y') == this_month_str)
                         ]
-                        # Aggregate reviews by month
+                        # Aggregate reviews by month (using formatted date)
                         if "reviews" in relevant_df.columns:
-                            relevant_df = relevant_df.groupby(relevant_df['date'].dt.month_name())['reviews'].sum().reset_index()
-                            relevant_df.columns = ['Month', 'Total Reviews']
+                            relevant_df = relevant_df.groupby(relevant_df['date'].dt.strftime('%d/%m/%Y'))['reviews'].sum().reset_index()
+                            relevant_df.columns = ['Date', 'Total Reviews']
                         else:
                             st.warning("No 'reviews' column found in the data.")
                     elif "month" in df.columns:
-                        # Handle month as a categorical column (e.g., "January", "February")
+                        # Handle month as a categorical column (e.g., convert to DD/MM/YYYY format)
                         if "category" in df.columns:
                             relevant_df = relevant_df[relevant_df['category'].str.contains("toothbrush", case=False, na=False)]
-                        # Get the last two months (assuming month names or numbers)
+                        # Get the last two months dynamically (assuming month names or numbers, convert to DD/MM/YYYY)
                         current_month = current_date.month
                         last_month_num = (current_month - 1) % 12 or 12  # Handle January (1) -> December (12)
-                        month_names = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May', 6: 'June',
-                                      7: 'July', 8: 'August', 9: 'September', 10: 'October', 11: 'November', 12: 'December'}
+                        month_names = {1: '01', 2: '02', 3: '03', 4: '04', 5: '05', 6: '06',
+                                      7: '07', 8: '08', 9: '09', 10: '10', 11: '11', 12: '12'}
+                        last_month_date = f"01/{month_names[last_month_num]}/{current_date.year}"
+                        this_month_date = f"01/{month_names[current_month]}/{current_date.year}"
                         relevant_df = relevant_df[
-                            relevant_df['month'].isin([month_names[current_month], month_names[last_month_num]])
+                            relevant_df['month'].isin([last_month_date, this_month_date])
                         ]
-                        # Aggregate reviews by month
+                        # Aggregate reviews by month (using formatted date)
                         if "reviews" in relevant_df.columns:
                             relevant_df = relevant_df.groupby('month')['reviews'].sum().reset_index()
-                            relevant_df.columns = ['Month', 'Total Reviews']
+                            relevant_df.columns = ['Date', 'Total Reviews']
                         else:
                             st.warning("No 'reviews' column found in the data.")
                     else:
@@ -148,9 +155,11 @@ if menu == "Insight Conversation":
                     # Look for numeric summaries in the response (e.g., totals, counts)
                     numbers = re.findall(r'\d+', response)
                     if numbers and potential_cols:
-                        # Create a small summary table if possible (e.g., for last and this month)
+                        # Create a small summary table if possible (e.g., for last and this month in DD/MM/YYYY format)
+                        last_month_str = (current_date.replace(day=1) - timedelta(days=1)).replace(day=1).strftime('%d/%m/%Y')
+                        this_month_str = current_date.replace(day=1).strftime('%d/%m/%Y')
                         summary_data = {
-                            'Month': ['Last Month', 'This Month'],
+                            'Date': [last_month_str, this_month_str],
                             'Total Reviews': [int(numbers[0]) if numbers else 0, int(numbers[1]) if len(numbers) > 1 else 0]
                         }
                         relevant_df = pd.DataFrame(summary_data)
@@ -176,7 +185,7 @@ if menu == "Insight Conversation":
                 categorical_cols = relevant_df.select_dtypes(include=['object', 'category']).columns
 
                 # Automatically select X-axis (categorical or date/time column preferred)
-                x_col = 'Month' if 'Month' in relevant_df.columns else None
+                x_col = 'Date' if 'Date' in relevant_df.columns else None
                 if not x_col and categorical_cols.any():
                     x_col = categorical_cols[0]  # Default to first categorical column
 
@@ -290,11 +299,15 @@ if menu == "Insight Conversation":
                             fig.add_trace(go.Bar(x=relevant_df[x_col], y=relevant_df[y_col], name='Bar Data', marker_color=color))
                             fig.add_trace(go.Scatter(x=relevant_df[x_col], y=relevant_df[y_col], mode='lines', name='Line Trend', line=dict(color='red')))
 
-                        # Update layout
+                        # Update layout with DD/MM/YYYY format for dates on X-axis
                         fig.update_layout(
                             title=f"{chart_title} ({chart_type})",
                             xaxis_title=x_col,
                             yaxis_title=y_col,
+                            xaxis=dict(
+                                tickformat='%d/%m/%Y',  # Format X-axis ticks as DD/MM/YYYY
+                                type='category' if not pd.api.types.is_numeric_dtype(relevant_df[x_col]) else 'linear'
+                            ),
                             height=500,
                             width=700,
                             showlegend=True  # Show legend for combo and scatter with trend line
@@ -374,11 +387,15 @@ if menu == "Insight Conversation":
                         fig.add_trace(go.Bar(x=relevant_df[manual_x_col], y=relevant_df[manual_y_col], name='Bar Data', marker_color=manual_color if manual_color_option == "Single Color" else None))
                         fig.add_trace(go.Scatter(x=relevant_df[manual_x_col], y=relevant_df[manual_y_col], mode='lines', name='Line Trend', line=dict(color='red' if manual_color_option == "Single Color" else None)))
 
-                    # Update layout
+                    # Update layout with DD/MM/YYYY format for dates on X-axis
                     fig.update_layout(
                         title=manual_chart_title,
                         xaxis_title=manual_x_col,
                         yaxis_title=manual_y_col,
+                        xaxis=dict(
+                            tickformat='%d/%m/%Y',  # Format X-axis ticks as DD/MM/YYYY
+                            type='category' if not pd.api.types.is_numeric_dtype(relevant_df[manual_x_col]) else 'linear'
+                        ),
                         height=500,
                         width=700,
                         showlegend=show_trend_line or manual_chart_type == "Combo"  # Show legend for trend line or combo chart
