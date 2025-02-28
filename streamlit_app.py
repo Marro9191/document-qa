@@ -224,4 +224,38 @@ if menu == "Insight Conversation":
                             fig.add_trace(go.Scatter(x=filtered_df[x_col], y=filtered_df[y_col], mode='lines', line=dict(color=color)))
                         
                         elif chart_type == "Pie":
-                           
+                            pie_data = filtered_df.groupby(x_col)[y_col].sum()  # Ensure summing for Pie chart
+                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                        
+                        elif chart_type == "Scatter":
+                            fig.add_trace(go.Scatter(
+                                x=filtered_df[x_col], 
+                                y=filtered_df[y_col], 
+                                mode='markers',
+                                marker=dict(color=color, size=10)
+                            ))
+                        
+                        elif chart_type == "Area":
+                            fig.add_trace(go.Scatter(
+                                x=filtered_df[x_col], 
+                                y=filtered_df[y_col], 
+                                fill='tozeroy',
+                                line=dict(color=color)
+                            ))
+
+                        # Update layout with labeled axes and dynamic title, reflecting summed totals
+                        fig.update_layout(
+                            title=title,
+                            xaxis_title=x_col,
+                            yaxis_title=f"Total {y_col}",
+                            height=500,
+                            width=700
+                        )
+                        
+                        st.plotly_chart(fig)
+                    else:
+                        st.warning("Could not determine suitable columns or chart type for visualization based on user input.")
+                else:
+                    st.warning("No numeric columns available for chart generation after attempting conversion.")
+            else:
+                st.warning("No data available for visualization based on user input.")
