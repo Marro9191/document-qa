@@ -113,16 +113,22 @@ if menu == "Insight Conversation":
                 # Identify numeric columns based on query keywords, prioritizing "reviews" or similar
                 numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 if numeric_cols.any():
+                    # Prioritize "reviews" or related keywords first, considering all numeric columns
                     for col in numeric_cols:
                         if 'review' in col.lower() or any(keyword in col.lower() for keyword in ["number", "count", "total", "value", "reviews"]):
                             numeric_col = col
                             break
+                    # If no exact match for "reviews," fall back to any numeric column implied by query, prioritizing keywords
                     if not numeric_col:
                         for col in numeric_cols:
                             if any(keyword in col.lower() for keyword in keywords) or \
-                               any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
+                               any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance", "returns", "ratings", "1st page rank"]):
                                 numeric_col = col
                                 break
+                    # If still no match, use the first numeric column as a last resort (for debugging)
+                    if not numeric_col:
+                        numeric_col = numeric_cols[0]
+                        st.warning(f"No specific numeric column found for query. Defaulting to '{numeric_col}'.")
 
                 # Filter for relevant category if mentioned in query
                 if 'toothbrush' in question.lower() and category_col and category_col in df.columns:
@@ -196,14 +202,15 @@ if menu == "Insight Conversation":
                            any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales"]):
                             y_col = col
                             break
-                    # If no match for "reviews" or related, fall back to any numeric column implied by query
+                    # If no match for "reviews" or related, fall back to any numeric column implied by query, prioritizing keywords
                     if not y_col:
                         for col in numeric_cols:
-                            if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance"]):
+                            if any(keyword in question.lower() for keyword in ["number", "count", "total", "value", "reviews", "sales", "performance", "returns", "ratings", "1st page rank"]):
                                 y_col = col
                                 break
                         if not y_col:
                             y_col = numeric_cols[0]  # Last resort: use first numeric column
+                            st.warning(f"No specific numeric column found for query. Defaulting to '{y_col}'.")
 
                     # Set X-axis (prefer date if available, otherwise first non-numeric column)
                     if date_col:
