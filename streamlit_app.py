@@ -58,6 +58,9 @@ if menu == "Insight Conversation":
             st.error("Unsupported file format")
             st.stop()
 
+        # Debug: Show data types of the original DataFrame
+        st.write("Debug: Original DataFrame dtypes:", df.dtypes)
+
         # Create the message with the document content and question
         messages = [
             {
@@ -105,11 +108,21 @@ if menu == "Insight Conversation":
 
                 # Check for numeric columns more thoroughly, matching query keywords
                 numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+                if numeric_cols.empty:
+                    # Try to convert columns that might be numeric but stored as strings or objects
+                    for col in df.columns:
+                        if df[col].dtype in ['object', 'string'] and df[col].str.match(r'^-?\d*\.?\d+$').all():
+                            df[col] = pd.to_numeric(df[col], errors='coerce')
+                    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+
                 if numeric_cols.any():
                     for col in numeric_cols:
                         if any(keyword in col.lower() for keyword in keywords):
                             numeric_col = col
                             break
+                    if not numeric_col:
+                        # If no specific numeric column matches, use the first numeric column
+                        numeric_col = numeric_cols[0]
 
                 # Filter data based on identified columns and date if available
                 if relevant_columns or date_col or numeric_col:
@@ -137,6 +150,9 @@ if menu == "Insight Conversation":
                     elif numeric_col:
                         filtered_df = filtered_df[[numeric_col] + relevant_columns]
 
+                # Debug: Show data types of filtered DataFrame
+                st.write("Debug: Filtered DataFrame dtypes:", filtered_df.dtypes)
+
                 # Display only relevant data table
                 if not filtered_df.empty:
                     st.write("Relevant Data Table (including dates if available):")
@@ -149,9 +165,9 @@ if menu == "Insight Conversation":
                 # Check for numeric columns more thoroughly
                 numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
                 if numeric_cols.empty:
-                    # Try to convert columns that might be numeric but stored as strings
+                    # Try to convert columns that might be numeric but stored as strings or objects
                     for col in filtered_df.columns:
-                        if filtered_df[col].dtype == 'object' and filtered_df[col].str.match(r'^-?\d*\.?\d+$').all():
+                        if filtered_df[col].dtype in ['object', 'string'] and filtered_df[col].str.match(r'^-?\d*\.?\d+$').all():
                             filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
                     numeric_cols = filtered_df.select_dtypes(include=['int64', 'float64']).columns
 
