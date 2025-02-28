@@ -101,7 +101,7 @@ if menu == "Insight Conversation":
                 for col in df.columns:
                     if any(keyword in col.lower() for keyword in keywords):
                         relevant_columns.append(col)
-                    if 'date' in col.lower() or 'time' in col.lower():
+                    if any(keyword in col.lower() for keyword in ["date", "time"]):
                         date_col = col
                     if 'category' in col.lower():
                         category_col = col
@@ -124,7 +124,7 @@ if menu == "Insight Conversation":
 
                 # Filter for Toothbrush category if mentioned in query
                 if 'toothbrush' in question.lower() and category_col and category_col in df.columns:
-                    filtered_df = df[df[category_col].str.lower() == 'toothbrush']
+                    filtered_df = df[df[category_col].str.lower() == 'toothbrush'].copy()
                 else:
                     filtered_df = df.copy()
 
@@ -185,7 +185,7 @@ if menu == "Insight Conversation":
                     color = "#00f900"  # Default green color
 
                     # Find date column if available
-                    date_cols = [col for col in filtered_df.columns if 'date' in col.lower() or 'time' in col.lower()]
+                    date_cols = [col for col in filtered_df.columns if any(keyword in col.lower() for keyword in ["date", "time"])]
                     date_col = date_cols[0] if date_cols else None
 
                     # Find numeric columns mentioned or implied in the query, prioritizing "reviews" or similar
