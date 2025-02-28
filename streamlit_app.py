@@ -159,13 +159,23 @@ if menu == "Insight Conversation":
                     y_col = numeric_cols[0]  # Default to first numeric column
 
                 # Automatically select chart type based on query and data
-                chart_type = "Bar"  # Default to Bar chart
+                chart_types = []  # List to store relevant chart types
                 if "trend" in question_lower or "over time" in question_lower:
-                    chart_type = "Line"
-                elif "distribution" in question_lower or "proportion" in question_lower:
-                    chart_type = "Pie"
-                elif "relationship" in question_lower or "correlation" in question_lower:
-                    chart_type = "Scatter"
+                    chart_types.append("Line")
+                if "distribution" in question_lower or "proportion" in question_lower:
+                    chart_types.append("Pie")
+                if "relationship" in question_lower or "correlation" in question_lower:
+                    chart_types.append("Scatter")
+                if "comparison" in question_lower or "total" in question_lower or "count" in question_lower:
+                    chart_types.append("Bar")
+                if "area" in question_lower or "cumulative" in question_lower:
+                    chart_types.append("Area")
+                if "combo" in question_lower or "combined" in question_lower or ("trend" in question_lower and "comparison" in question_lower):
+                    chart_types.append("Combo")
+
+                # Default to Bar if no specific chart types are inferred
+                if not chart_types:
+                    chart_types = ["Bar"]
 
                 # Automatically select color (if applicable)
                 color_option = "Single Color"
@@ -185,67 +195,74 @@ if menu == "Insight Conversation":
                 # Create a concise title
                 chart_title = " ".join(keywords) if keywords else f"Visualization for: {question[:30]}..."  # Limit to 30 chars if no keywords
 
-                # Generate the chart automatically
-                if x_col and y_col:
-                    fig = go.Figure()
-                    
-                    if chart_type == "Bar":
-                        fig.add_trace(go.Bar(x=relevant_df[x_col], y=relevant_df[y_col], marker_color=color))
-                    
-                    elif chart_type == "Line":
-                        fig.add_trace(go.Scatter(x=relevant_df[x_col], y=relevant_df[y_col], mode='lines', line=dict(color=color)))
-                    
-                    elif chart_type == "Pie":
-                        pie_data = relevant_df.groupby(x_col)[y_col].sum()
-                        fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
-                    
-                    elif chart_type == "Scatter":
-                        # Add scatter plot
-                        fig.add_trace(go.Scatter(
-                            x=relevant_df[x_col], 
-                            y=relevant_df[y_col], 
-                            mode='markers',
-                            marker=dict(color=color, size=10),
-                            name='Data Points'
-                        ))
-                        # Add trend line (linear regression)
-                        x = np.array(relevant_df[x_col].astype(float) if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else range(len(relevant_df)))
-                        y = np.array(relevant_df[y_col].astype(float))
-                        coefficients = np.polyfit(x, y, 1)  # Linear regression (degree 1)
-                        trend_line = np.polyval(coefficients, x)
-                        fig.add_trace(go.Scatter(
-                            x=x if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else relevant_df[x_col],
-                            y=trend_line,
-                            mode='lines',
-                            line=dict(color='red', dash='dash'),
-                            name='Trend Line'
-                        ))
-                    
-                    elif chart_type == "Area":
-                        fig.add_trace(go.Scatter(
-                            x=relevant_df[x_col], 
-                            y=relevant_df[y_col], 
-                            fill='tozeroy',
-                            line=dict(color=color)
-                        ))
+                # Generate charts automatically for each relevant chart type
+                for chart_type in chart_types:
+                    if x_col and y_col:
+                        fig = go.Figure()
+                        
+                        if chart_type == "Bar":
+                            fig.add_trace(go.Bar(x=relevant_df[x_col], y=relevant_df[y_col], marker_color=color))
+                        
+                        elif chart_type == "Line":
+                            fig.add_trace(go.Scatter(x=relevant_df[x_col], y=relevant_df[y_col], mode='lines', line=dict(color=color)))
+                        
+                        elif chart_type == "Pie":
+                            pie_data = relevant_df.groupby(x_col)[y_col].sum()
+                            fig.add_trace(go.Pie(labels=pie_data.index, values=pie_data.values))
+                        
+                        elif chart_type == "Scatter":
+                            # Add scatter plot
+                            fig.add_trace(go.Scatter(
+                                x=relevant_df[x_col], 
+                                y=relevant_df[y_col], 
+                                mode='markers',
+                                marker=dict(color=color, size=10),
+                                name='Data Points'
+                            ))
+                            # Add trend line (linear regression)
+                            x = np.array(relevant_df[x_col].astype(float) if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else range(len(relevant_df)))
+                            y = np.array(relevant_df[y_col].astype(float))
+                            coefficients = np.polyfit(x, y, 1)  # Linear regression (degree 1)
+                            trend_line = np.polyval(coefficients, x)
+                            fig.add_trace(go.Scatter(
+                                x=x if pd.api.types.is_numeric_dtype(relevant_df[x_col]) else relevant_df[x_col],
+                                y=trend_line,
+                                mode='lines',
+                                line=dict(color='red', dash='dash'),
+                                name='Trend Line'
+                            ))
+                        
+                        elif chart_type == "Area":
+                            fig.add_trace(go.Scatter(
+                                x=relevant_df[x_col], 
+                                y=relevant_df[y_col], 
+                                fill='tozeroy',
+                                line=dict(color=color)
+                            ))
+                        
+                        elif chart_type == "Combo":
+                            # Combo chart: Combine Bar and Line (e.g., bars for one metric, line for trend)
+                            fig.add_trace(go.Bar(x=relevant_df[x_col], y=relevant_df[y_col], name='Bar Data', marker_color=color))
+                            fig.add_trace(go.Scatter(x=relevant_df[x_col], y=relevant_df[y_col], mode='lines', name='Line Trend', line=dict(color='red')))
 
-                    # Update layout
-                    fig.update_layout(
-                        title=chart_title,
-                        xaxis_title=x_col,
-                        yaxis_title=y_col,
-                        height=500,
-                        width=700,
-                        showlegend=True  # Show legend for trend line and data points
-                    )
-                    
-                    st.plotly_chart(fig)
-                else:
-                    st.warning("No suitable columns found for automatic visualization. Please manually select fields below.")
+                        # Update layout
+                        fig.update_layout(
+                            title=f"{chart_title} ({chart_type})",
+                            xaxis_title=x_col,
+                            yaxis_title=y_col,
+                            height=500,
+                            width=700,
+                            showlegend=True  # Show legend for combo and scatter with trend line
+                        )
+                        
+                        st.plotly_chart(fig)
+                    else:
+                        st.warning(f"No suitable columns found for {chart_type} visualization. Please manually select fields below.")
+                        break  # Stop if no suitable columns are found
 
                 # Customize the visualization manually, using all options from the original DataFrame (df)
                 st.write("Or customize the visualization manually:")
-                manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area"], index=["Bar", "Line", "Pie", "Scatter", "Area"].index(chart_type))
+                manual_chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Pie", "Scatter", "Area", "Combo"], index=["Bar", "Line", "Pie", "Scatter", "Area", "Combo"].index(chart_types[0]))
                 manual_x_col = st.selectbox("X-axis", df.columns, index=df.columns.get_loc(x_col) if x_col and x_col in df.columns else 0)
                 manual_numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
                 manual_y_col = st.selectbox("Y-axis", manual_numeric_cols, index=manual_numeric_cols.get_loc(y_col) if y_col and y_col in manual_numeric_cols else 0)
@@ -306,6 +323,11 @@ if menu == "Insight Conversation":
                             fill='tozeroy',
                             line=dict(color=manual_color if manual_color_option == "Single Color" else None)
                         ))
+                    
+                    elif manual_chart_type == "Combo":
+                        # Combo chart: Combine Bar and Line (e.g., bars for one metric, line for trend)
+                        fig.add_trace(go.Bar(x=relevant_df[manual_x_col], y=relevant_df[manual_y_col], name='Bar Data', marker_color=manual_color if manual_color_option == "Single Color" else None))
+                        fig.add_trace(go.Scatter(x=relevant_df[manual_x_col], y=relevant_df[manual_y_col], mode='lines', name='Line Trend', line=dict(color='red' if manual_color_option == "Single Color" else None)))
 
                     # Update layout
                     fig.update_layout(
@@ -314,7 +336,7 @@ if menu == "Insight Conversation":
                         yaxis_title=manual_y_col,
                         height=500,
                         width=700,
-                        showlegend=show_trend_line  # Show legend only if trend line is present
+                        showlegend=show_trend_line or manual_chart_type == "Combo"  # Show legend for trend line or combo chart
                     )
                     
                     st.plotly_chart(fig)
